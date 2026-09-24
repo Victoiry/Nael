@@ -1,9 +1,7 @@
 // Verifie qu'aucune cle de traduction brute n'apparait a l'ecran (4 langues, accueil + app)
-const chromium = require('@sparticuz/chromium').default || require('@sparticuz/chromium');
-const puppeteer = require('puppeteer-core');
+const { launch } = require('./browser');
 (async () => {
-  const browser = await puppeteer.launch({ args: [...chromium.args, '--no-sandbox', '--disable-gpu', '--single-process', '--no-zygote', '--disable-dev-shm-usage'],
-    executablePath: await chromium.executablePath(), headless: true, defaultViewport: { width: 1280, height: 800 } });
+  const browser = await launch({ defaultViewport: { width: 1280, height: 800 } });
   const page = await browser.newPage();
   const errs = [];
   page.on('pageerror', (e) => errs.push(e.message.slice(0, 120)));
@@ -29,8 +27,8 @@ const puppeteer = require('puppeteer-core');
   }
   // dans l'app
   await page.evaluate(() => {
-    localStorage.setItem('jarvis:key', JSON.stringify('sk-or-v1-x'));
-    localStorage.setItem('jarvis:choseMode', 'true');
+    localStorage.setItem('jarvis.key', JSON.stringify('sk-or-v1-x'));
+    localStorage.setItem('jarvis.choseMode', 'true');
   });
   await page.reload({ waitUntil: 'load' });
   await new Promise((r) => setTimeout(r, 700));

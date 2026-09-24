@@ -24,11 +24,11 @@ Le serveur écoute sur `0.0.0.0` (port `PORT` si défini). Tout le site (pages, 
 4. **Test avant enregistrement** — pop-up verticale « Quel modèle voulez-vous tester ? » :
    - ⚠ **en gras et rouge** : les modèles qui ne contiennent pas `/free` ou `:free` sont **payants** ;
    - bouton **Plus d'infos** → documentation OpenRouter (payants / gratuits / tarifs) ;
-   - liste des modèles **payants en premier**, badge `🆓 FREE` / `💳 PAID`, contexte, vision ;
+   - liste des modèles **payants en premier**, badge `FREE` / `PAID`, contexte, vision ;
    - si le modèle choisi est payant → pop-up d'avertissement avec **compte à rebours de 5 s** avant de pouvoir lancer le test.
    - la clé n'est enregistrée **qu'après un test réussi**.
 5. **Fichier à exécuter** — téléchargement de `JARVIS-Setup.bat` : il installe **Claude Code CLI**, le lie à **OpenRouter** (modèle gratuit choisi) **et à ce site**. Il affiche un **numéro de vérification aléatoire**, à recopier dans le site : la liaison est vérifiée automatiquement (et manuellement via le champ prévu).
-6. **L'application** — interface type ChatGPT avec panneau latéral redimensionnable (¼ de la page par défaut, glissez la poignée entre le chat et le panneau).
+6. **L'application** — interface **type ChatGPT**, volontairement dépouillée : barre latérale de conversations à gauche, chat centré, barre de saisie compacte, **aucun emoji** (uniquement des icônes SVG, `public/js/icons.js`). Tous les réglages avancés sont rangés derrière l'**icône engrenage** (tiroir à droite : Personnaliser · Paramètres globaux · Paramètres de l'IA · Modes · Historique · Mémoire · Console · Pont local). Les modes (Multitâche, Comparaison, Code, Privé, Hors connexion, Image, Vidéo) et le contexte (RAG, fichiers, skills) sont dans le bouton **+** de la barre de saisie.
 
 ## 🧠 Fonctionnalités
 
@@ -75,12 +75,14 @@ bridge/
 public/
   index.html · css/app.css
   js/i18n.js            FR / EN / ES / IT (toutes les chaînes)
+  js/i18n.extra.js      compléments de traduction (studio image/vidéo, réglages)
+  js/icons.js           jeu d'icônes SVG (aucun emoji dans l'interface)
   js/core.js            état, thème, i18n, API/SSE, markdown, voix
   js/settings.js        panneaux Personnaliser / Global / IA / Historique / Mémoire / Console / Pont
   js/chat.js            chat, effort, modèles, vocal, live, RAG, skills, onglets
   js/media.js           studios image & vidéo
   js/app.js             accueil, clé, test modèle, .bat, vérification, espace de travail
-tools/smoke.js          test front automatisé (jsdom)
+tools/                  tests : smoke (jsdom), verify-layout, verify-app, verify-i18n-ui, verify-stale, doctor
 legacy/                 ancien projet « garcon runner »
 ```
 

@@ -1,199 +1,286 @@
-/* JARVIS core: state, i18n, UI helpers, api, markdown, voice, media */
+/* JARVIS — noyau : état, i18n, API, markdown, modales, voix, icônes */
 (function () {
+  const LANGS = [
+    { code: 'fr', label: 'Français' },
+    { code: 'en', label: 'English' },
+    { code: 'es', label: 'Español' },
+    { code: 'it', label: 'Italiano' },
+  ];
+  const VOICE_LANGS = { fr: 'fr-FR', en: 'en-US', es: 'es-ES', it: 'it-IT' };
+
+  // ---------------------------------------------------------------- stockage
   const LS = {
-    get(k, d) { try { const v = localStorage.getItem('jarvis:' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
-    set(k, v) { try { localStorage.setItem('jarvis:' + k, JSON.stringify(v)); } catch {} },
-    del(k) { try { localStorage.removeItem('jarvis:' + k); } catch {} },
-    raw(k, d) { try { return sessionStorage.getItem('jarvis:' + k) || d; } catch { return d; } },
-    setRaw(k, v) { try { sessionStorage.setItem('jarvis:' + k, v); } catch {} },
+    get(k, d) { try { const v = localStorage.getItem('jarvis.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem('jarvis.' + k, JSON.stringify(v)); return true; } catch { return false; } },
+    getRaw(k, d) { try { const v = localStorage.getItem('jarvis.' + k); return v == null ? d : v; } catch { return d; } },
+    setRaw(k, v) { try { localStorage.setItem('jarvis.' + k, v); return true; } catch { return false; } },
+    del(k) { try { localStorage.removeItem('jarvis.' + k); } catch {} },
   };
 
   const DEFAULT_PROFILE = () => ({
     id: 'p' + Math.random().toString(36).slice(2, 8),
-    name: 'Mon réglage',
+    name: 'Profil principal',
     aiName: 'JARVIS',
     userName: '',
     profession: '',
-    language: '',
     calling: '',
-    personality: 'Professionnel, précis, chaleureux, proactif',
-    tone: 'Direct et clair',
+    language: '',
+    personality: '',
+    tone: 'chaleureux, direct, précis',
+    expertise: 'généraliste',
     instructions: '',
     forbidden: '',
-    expertise: 'Adapte-toi à mon niveau',
-    avatar: '🤖',
     voice: '',
     voiceRate: 1,
     voicePitch: 1,
   });
 
   const DEFAULTS = () => ({
-    lang: (navigator.language || 'fr').slice(0, 2).toLowerCase().match(/^(fr|en|es|it)$/) ? (navigator.language || 'fr').slice(0, 2).toLowerCase() : 'fr',
-    profiles: [DEFAULT_PROFILE()],
+    lang: (navigator.language || 'fr').slice(0, 2) in { fr: 1, en: 1, es: 1, it: 1 } ? (navigator.language || 'fr').slice(0, 2) : 'fr',
     activeProfile: 0,
-    global: {
-      theme: 'dark', accent: '#22d3ee', accent2: '#a855f7',
-      bgType: 'gradient', bgUrl: '', particles: true, glass: 18, density: 1, radius: 16,
-      font: "'Inter', 'Segoe UI', system-ui, sans-serif", fontSize: 15, anim: true,
-    },
+    profiles: [DEFAULT_PROFILE()],
+    global: { theme: 'dark', accent: '#22d3ee', accent2: '#7c6cff', bgType: 'gradient', bgUrl: '', particles: true, glass: 14, density: 1, radius: 14, fontSize: 15, font: "'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif", anim: true, compact: false },
     ai: {
-      temperature: 0.7, maxTokens: 2000, stream: true, autoScroll: true, enterSend: true,
-      ttsAuto: false, sttLang: '', wake: true, visionWarn: true, compact: false, privateDefault: false,
-      approvalMode: 'ask', maxRisk: 'high', model: '', effort: 'normal', useMemory: true, useHistory: true,
+      model: '', effort: 'normal', temperature: 0.7, maxTokens: 4000, stream: true, autoScroll: true,
+      enterSend: true, compact: false, ttsAuto: false, sttLang: '', wake: false, useMemory: true, useHistory: true,
+      privateDefault: false, approvalMode: 'ask', visionWarn: true,
     },
   });
 
-  function deepMerge(base, over) {
-    if (Array.isArray(base)) return Array.isArray(over) ? over : base;
-    if (typeof base === 'object' && base) {
-      const out = { ...base };
-      for (const k of Object.keys(over || {})) out[k] = (typeof base[k] === 'object' && base[k] && !Array.isArray(base[k])) ? deepMerge(base[k], over[k]) : (over[k] === undefined ? base[k] : over[k]);
-      return out;
-    }
-    return over === undefined ? base : over;
-  }
-
   const S = {
-    settings: deepMerge(DEFAULTS(), LS.get('settings', {})),
-    conv: LS.get('convs', []),
+    settings: LS.get('settings', null) || DEFAULTS(),
+    key: LS.getRaw('key', ''),
+    model: LS.get('model', ''),
+    conv: LS.get('conv', []),
+    hist: LS.get('hist', []),
     mem: LS.get('mem', []),
     skills: LS.get('skills', []),
-    hist: LS.get('hist', []),
-    key: LS.raw('key', '') || LS.get('key', ''),
-    model: LS.get('model', ''),
     auth: LS.get('auth', null),
-    user: null,
     mode: LS.get('mode', 'chat'),
-    tab: 'classic',
+    tab: LS.get('tab', 'classic'),
     activeId: null,
-    bridge: { sessionId: LS.raw('bsid', '') || ('sess_' + Math.random().toString(36).slice(2, 8)), online: false, verified: !!LS.get('paired', false) },
     private: false,
+    privateConv: null,
+    user: null,
     abort: null,
+    bridge: { online: false, sessionId: LS.getRaw('sess', 'sess_' + Math.random().toString(36).slice(2, 10)), verified: false },
+  };
+  // migration douce (nouvelles clés de réglages)
+  S.settings = Object.assign(DEFAULTS(), S.settings);
+  S.settings.global = Object.assign(DEFAULTS().global, S.settings.global || {});
+  S.settings.ai = Object.assign(DEFAULTS().ai, S.settings.ai || {});
+  if (!Array.isArray(S.settings.profiles) || !S.settings.profiles.length) S.settings.profiles = [DEFAULT_PROFILE()];
+
+  const save = (what) => {
+    const map = {
+      settings: () => LS.set('settings', S.settings), model: () => LS.set('model', S.model), conv: () => LS.set('conv', S.conv),
+      hist: () => LS.set('hist', S.hist), mem: () => LS.set('mem', S.mem), skills: () => LS.set('skills', S.skills),
+      auth: () => LS.set('auth', S.auth), mode: () => LS.set('mode', S.mode), tab: () => LS.set('tab', S.tab),
+    };
+    if (!what) { Object.values(map).forEach((f) => f()); return; }
+    (map[what] || (() => {}))();
   };
 
-  const listeners = [];
-  function save(what) {
-    if (what === 'settings' || !what) LS.set('settings', S.settings);
-    if (what === 'conv' || !what) LS.set('convs', S.conv.slice(0, 200));
-    if (what === 'mem' || !what) LS.set('mem', S.mem);
-    if (what === 'skills' || !what) LS.set('skills', S.skills);
-    if (what === 'hist' || !what) LS.set('hist', S.hist.slice(0, 300));
-    if (what === 'auth' || !what) LS.set('auth', S.auth);
-    if (what === 'key' || !what) { LS.setRaw('key', S.key); }
-    if (what === 'model' || !what) LS.set('model', S.model);
-    if (what === 'mode' || !what) LS.set('mode', S.mode);
-    listeners.forEach((f) => { try { f(what); } catch {} });
-    if (!S.private) cloudPush();
-  }
-  const onSave = (f) => listeners.push(f);
-
-  // ---------------- i18n
-  function lookup(key) {
-    const fr = window.I18N.fr || {};
-    const cur = window.I18N[S.settings.lang] || fr;
-    if (cur && cur[key] !== undefined) return cur[key];
-    if (fr[key] !== undefined) return fr[key];                     // repli sur le francais
-    if (window.I18N.en && window.I18N.en[key] !== undefined) return window.I18N.en[key];
+  // ---------------------------------------------------------------- i18n
+  const lookup = (lang, key) => {
+    const table = window.I18N && window.I18N[lang];
+    if (!table) return undefined;
+    if (table[key] != null && table[key] !== '') return table[key];
     return undefined;
+  };
+  function t(str, vars) {
+    if (str == null) return '';
+    let out = lookup(S.settings.lang, str);
+    if (out == null) out = lookup('fr', str);
+    if (out == null) out = lookup('en', str);
+    // clé absente (vieux cache, nouvelle clé…) : on ne remplace rien, le texte
+    // statique du HTML reste affiché et aucune clé brute n'apparaît jamais.
+    if (out == null) return '';
+    if (vars) Object.keys(vars).forEach((k) => { out = out.split('{' + k + '}').join(vars[k]); });
+    return out;
   }
-  function t(key, vars) {
-    let s = lookup(key);
-    if (s === undefined) return key;                               // cle absente : on renvoie la cle (utilise par les tests)
-    if (vars) for (const k of Object.keys(vars)) s = s.split('{' + k + '}').join(vars[k]);
-    return s;
-  }
-  // applique les traductions sans jamais laisser une cle brute a l'ecran
   function applyI18n(root) {
     const scope = root || document;
-    scope.querySelectorAll('[data-i18n]').forEach((e) => { const v = lookup(e.dataset.i18n); if (v !== undefined) e.textContent = v; });
-    scope.querySelectorAll('[data-i18n-ph]').forEach((e) => { const v = lookup(e.dataset.i18nPh); if (v !== undefined) e.placeholder = v; });
-    scope.querySelectorAll('[data-i18n-title]').forEach((e) => { const v = lookup(e.dataset.i18nTitle); if (v !== undefined) e.title = v; });
-    document.documentElement.lang = S.settings.lang;
+    scope.querySelectorAll('[data-i18n]').forEach((n) => {
+      if (n.dataset.i18n === 'skip') return;
+      const txt = t(n.dataset.i18n);
+      if (txt) n.textContent = txt;
+    });
+    scope.querySelectorAll('[data-i18n-ph]').forEach((n) => { const txt = t(n.dataset.i18nPh); if (txt) n.placeholder = txt; });
+    scope.querySelectorAll('[data-i18n-title]').forEach((n) => { const txt = t(n.dataset.i18nTitle); if (txt) { n.title = txt; n.setAttribute('aria-label', txt); } });
   }
-  function setLang(l) { S.settings.lang = l; save('settings'); applyI18n(document); document.dispatchEvent(new CustomEvent('jarvis:lang')); }
+  function setLang(code) {
+    if (!LANGS.some((l) => l.code === code)) return;
+    S.settings.lang = code; save('settings');
+    document.documentElement.lang = code;
+    applyI18n(document);
+    document.querySelectorAll('select').forEach((s) => { if (s.id.startsWith('lang-select')) s.value = code; });
+    document.dispatchEvent(new CustomEvent('jarvis:lang'));
+  }
 
-  // ---------------- theme
+  // ---------------------------------------------------------------- thème
   function applyTheme() {
     const g = S.settings.global;
     const r = document.documentElement;
     r.dataset.theme = g.theme;
-    r.dataset.anim = g.anim ? '1' : '0';
-    r.style.setProperty('--accent', g.accent);
-    r.style.setProperty('--accent2', g.accent2);
-    r.style.setProperty('--glass', g.glass + 'px');
-    r.style.setProperty('--density', g.density);
-    r.style.setProperty('--radius', g.radius + 'px');
-    r.style.setProperty('--font', g.font);
-    r.style.setProperty('--fs', g.fontSize + 'px');
-    const layer = document.querySelector('#bg .layer');
-    const cv = document.querySelector('#bg canvas');
-    if (layer) {
-      if (g.bgType === 'image' && g.bgUrl) { layer.style.backgroundImage = `url("${g.bgUrl}")`; layer.style.display = 'block'; }
-      else if (g.bgType === 'video' && g.bgUrl) { layer.style.display = 'none'; ensureBgVideo(g.bgUrl); }
-      else { layer.style.backgroundImage = 'none'; layer.style.display = 'none'; }
+    const st = r.style;
+    st.setProperty('--accent', g.accent);
+    st.setProperty('--accent2', g.accent2);
+    st.setProperty('--density', String(g.density));
+    st.setProperty('--glass', g.glass + 'px');
+    st.setProperty('--radius', g.radius + 'px');
+    st.setProperty('--fs', g.fontSize + 'px');
+    st.setProperty('--font', g.font);
+    st.setProperty('--anim-speed', g.anim ? '.16s' : '0s');
+    const bg = document.getElementById('bg');
+    if (bg) {
+      if (g.bgType === 'image' && g.bgUrl) { bg.style.backgroundImage = `url(${JSON.stringify(g.bgUrl)})`; bg.style.backgroundSize = 'cover'; bg.style.backgroundPosition = 'center'; }
+      else if (g.bgType === 'video' && g.bgUrl) {
+        let v = bg.querySelector('video');
+        if (!v) { v = document.createElement('video'); v.autoplay = true; v.muted = true; v.loop = true; v.playsInline = true; v.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover'; bg.appendChild(v); }
+        if (v.getAttribute('src') !== g.bgUrl) v.setAttribute('src', g.bgUrl);
+        v.play?.().catch(() => {});
+      } else { bg.style.backgroundImage = ''; bg.querySelector('video')?.remove(); }
     }
-    if (cv) cv.style.display = g.particles ? 'block' : 'none';
-    if (g.particles) startParticles();
-  }
-  let bgVideo = null;
-  function ensureBgVideo(url) {
-    if (bgVideo && bgVideo.src === url) return;
-    if (bgVideo) bgVideo.remove();
-    bgVideo = document.createElement('video');
-    bgVideo.src = url; bgVideo.muted = true; bgVideo.loop = true; bgVideo.autoplay = true; bgVideo.playsInline = true;
-    bgVideo.className = 'layer'; bgVideo.style.display = 'block';
-    document.getElementById('bg').appendChild(bgVideo);
-  }
-  let pAnim = null;
-  function startParticles() {
-    const cv = document.querySelector('#bg canvas');
-    if (!cv || pAnim) return;
-    const ctx = cv.getContext && cv.getContext('2d');
-    if (!ctx) return;
-    let w, h, dots;
-    const resize = () => { w = cv.width = innerWidth; h = cv.height = innerHeight; dots = Array.from({ length: 60 }, () => ({ x: Math.random() * w, y: Math.random() * h, vx: (Math.random() - .5) * .35, vy: (Math.random() - .5) * .35, r: Math.random() * 1.9 + .5 })); };
-    resize(); addEventListener('resize', resize);
-    const accent = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#22d3ee';
-    pAnim = setInterval(() => {
-      if (!S.settings.global.particles) return;
-      ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = accent(); ctx.globalAlpha = .5;
-      dots.forEach((d) => { d.x += d.vx; d.y += d.vy; if (d.x < 0 || d.x > w) d.vx *= -1; if (d.y < 0 || d.y > h) d.vy *= -1; ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, 7); ctx.fill(); });
-      ctx.globalAlpha = .12; ctx.strokeStyle = accent();
-      for (let i = 0; i < dots.length; i++) for (let j = i + 1; j < dots.length; j++) {
-        const a = dots[i], b = dots[j], dx = a.x - b.x, dy = a.y - b.y;
-        if (dx * dx + dy * dy < 13000) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
-      }
-    }, 40);
+    r.dataset.compact = S.settings.ai.compact ? '1' : '0';
+    r.dataset.density = String(g.density);
   }
 
-  // ---------------- api
+  // ---------------------------------------------------------------- DOM
+  function el(tag, props, ...kids) {
+    const n = document.createElement(tag);
+    Object.entries(props || {}).forEach(([k, v]) => {
+      if (v == null || v === false) return;
+      if (k === 'class') n.className = v;
+      else if (k === 'html') n.innerHTML = v;
+      else if (k === 'text') n.textContent = v;
+      else if (k === 'style') n.style.cssText = v;
+      else if (k === 'dataset') Object.assign(n.dataset, v);
+      else if (k.startsWith('on') && typeof v === 'function') n.addEventListener(k.slice(2), v);
+      else if (k === 'selected' || k === 'checked' || k === 'disabled') n[k] = !!v;
+      else n.setAttribute(k, v);
+    });
+    kids.flat().forEach((c) => { if (c == null || c === false) return; n.appendChild(typeof c === 'string' || typeof c === 'number' ? document.createTextNode(String(c)) : c); });
+    return n;
+  }
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function toast(msg, kind) {
+    const box = document.getElementById('toasts');
+    if (!box) return;
+    const n = el('div', { class: 'toast ' + (kind || ''), text: msg });
+    box.appendChild(n);
+    setTimeout(() => { n.style.opacity = '0'; setTimeout(() => n.remove(), 250); }, 3800);
+  }
+
+  function modal({ title, sub, body, foot, vert, closeable = true, onClose } = {}) {
+    const card = el('div', { class: 'modal' + (vert ? ' vert' : '') });
+    const head = el('div', { class: 'row' }, el('h2', { text: title || '' }), el('span', { class: 'spacer' }));
+    if (closeable) {
+      const x = el('button', { class: 'ibtn', title: t('common.close') }, J.icon('close', 16));
+      x.addEventListener('click', () => close());
+      head.appendChild(x);
+    }
+    card.appendChild(head);
+    if (sub) card.appendChild(el('div', { class: 'sub', text: sub }));
+    if (body) card.appendChild(body);
+    if (foot && foot.length) {
+      const f = el('div', { class: 'foot' });
+      foot.flat().forEach((x) => x && f.appendChild(x));
+      card.appendChild(f);
+    }
+    const ov = el('div', { class: 'overlay' }, card);
+    ov.addEventListener('click', (e) => { if (e.target === ov && closeable) close(); });
+    document.body.appendChild(ov);
+    function close() {
+      if (!ov.parentElement) return;
+      ov.remove();
+      document.removeEventListener('keydown', onKey);
+      onClose && onClose();
+    }
+    function onKey(e) { if (e.key === 'Escape' && closeable) { e.stopPropagation(); close(); } }
+    document.addEventListener('keydown', onKey);
+    applyI18n(card);
+    setTimeout(() => card.querySelector('input,textarea')?.focus(), 60);
+    return { close, el: card, overlay: ov };
+  }
+
+  /** Modale avec compte à rebours : le DERNIER bouton reste verrouillé N secondes. */
+  function countdownModal({ title, sub, body, seconds = 5, foot = [] }) {
+    const btns = foot.map((f) => (typeof f === 'function' ? f() : f));
+    const lock = btns[btns.length - 1];
+    if (lock) {
+      lock.disabled = true;
+      lock.dataset.label = lock.textContent;
+      let n = seconds;
+      lock.textContent = lock.dataset.label + ' (' + n + ')';
+      const iv = setInterval(() => {
+        n -= 1;
+        if (n <= 0) { clearInterval(iv); lock.disabled = false; lock.textContent = lock.dataset.label; }
+        else lock.textContent = lock.dataset.label + ' (' + n + ')';
+      }, 1000);
+      const m = modal({ title, sub, body: el('div', {}, body || '', el('div', { class: 'notice warn tiny', style: 'margin-top:.6rem', text: t('paid.countdown') })), foot: btns, vert: true, onClose: () => clearInterval(iv) });
+      return m;
+    }
+    return modal({ title, sub, body, foot: btns, vert: true });
+  }
+
+  // ---------------------------------------------------------------- API
+  const authHeaders = () => (S.auth?.token ? { Authorization: 'Bearer ' + S.auth.token } : {});
+
   const API = {
-    base: '',
-    async call(path, opts = {}) {
-      const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
-      if (S.auth?.token) headers.Authorization = 'Bearer ' + S.auth.token;
-      const r = await fetch(path, { method: opts.method || 'GET', headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
-      const txt = await r.text();
-      try { return JSON.parse(txt); } catch { return { raw: txt }; }
+    async call(path, { method = 'GET', body, headers } = {}) {
+      try {
+        const r = await fetch(path, {
+          method,
+          headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders(), headers || {}),
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
+        const txt = await r.text();
+        let data = {};
+        try { data = txt ? JSON.parse(txt) : {}; } catch { data = { raw: txt }; }
+        if (!r.ok && r.status === 401) { data.error = 'auth'; }
+        return data;
+      } catch (e) { return { error: String(e.message || e) }; }
     },
-    async stream(path, body, handlers) {
-      const headers = { 'Content-Type': 'application/json' };
-      if (S.auth?.token) headers.Authorization = 'Bearer ' + S.auth.token;
+    /** SSE: renvoie une promesse résolue à la fin du flux. */
+    async stream(path, payload, handlers = {}) {
       const ctrl = new AbortController();
       S.abort = ctrl;
-      const r = await fetch(path, { method: 'POST', headers, body: JSON.stringify(body), signal: ctrl.signal });
-      if (!r.ok || !r.body) { const tx = await r.text().catch(() => ''); throw new Error('HTTP ' + r.status + ' ' + tx.slice(0, 200)); }
-      const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = '';
-      while (true) {
-        const { value, done } = await reader.read(); if (done) break;
+      const r = await fetch(path, {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+        body: JSON.stringify(payload),
+        signal: ctrl.signal,
+      });
+      let ctype = '';
+      try { ctype = (r.headers && r.headers.get) ? (r.headers.get('content-type') || '') : ''; } catch { ctype = ''; }
+      const isStream = !!(r.body && typeof r.body.getReader === 'function') && (!ctype || ctype.includes('event-stream'));
+      if (!r.ok || !isStream) {
+        const txt = await r.text();
+        let msg = txt;
+        try { msg = JSON.parse(txt).error || txt; } catch {}
+        handlers.error && handlers.error({ message: msg || ('HTTP ' + r.status) });
+        S.abort = null;
+        return;
+      }
+      const reader = r.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
         buf += dec.decode(value, { stream: true });
-        const parts = buf.split('\n\n'); buf = parts.pop();
+        const parts = buf.split('\n\n');
+        buf = parts.pop();
         for (const part of parts) {
           const ev = (part.match(/^event:\s*(.+)$/m) || [])[1];
           const dataLine = (part.match(/^data:\s*(.+)$/m) || [])[1];
           if (!ev || !dataLine) continue;
-          try { handlers[ev] && handlers[ev](JSON.parse(dataLine)); } catch {}
+          let data = {};
+          try { data = JSON.parse(dataLine); } catch {}
+          const fn = handlers[ev];
+          if (fn) fn(data);
         }
       }
       S.abort = null;
@@ -201,136 +288,136 @@
     stop() { try { S.abort?.abort(); } catch {} S.abort = null; },
   };
 
-  // ---------------- ui
-  function el(tag, attrs = {}, ...kids) {
-    const n = document.createElement(tag);
-    for (const [k, v] of Object.entries(attrs)) {
-      if (k === 'class') n.className = v;
-      else if (k === 'html') n.innerHTML = v;
-      else if (k === 'text') n.textContent = v;
-      else if (k.startsWith('on') && typeof v === 'function') n.addEventListener(k.slice(2), v);
-      else if (v !== undefined && v !== null) n.setAttribute(k, v);
-    }
-    kids.flat().forEach((k) => k && n.appendChild(typeof k === 'string' ? document.createTextNode(k) : k));
-    return n;
-  }
-  function toast(msg, kind = '') {
-    const box = document.getElementById('toasts');
-    const n = el('div', { class: 'toast ' + kind, text: msg });
-    box.appendChild(n);
-    setTimeout(() => { n.style.opacity = '0'; setTimeout(() => n.remove(), 300); }, 3600);
-  }
-  function modal({ title, sub, body, foot, vert, onClose, closeable = true }) {
-    const overlay = el('div', { class: 'overlay' });
-    const m = el('div', { class: 'modal' + (vert ? ' vert' : '') });
-    if (title) m.appendChild(el('h2', { text: title }));
-    if (sub) m.appendChild(el('div', { class: 'sub', text: sub }));
-    if (body) m.appendChild(typeof body === 'string' ? el('div', { html: body }) : body);
-    if (foot) { const f = el('div', { class: 'foot' }); (Array.isArray(foot) ? foot : [foot]).forEach((b) => f.appendChild(b)); m.appendChild(f); }
-    overlay.appendChild(m);
-    if (closeable) overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
-    document.body.appendChild(overlay);
-    function close() { overlay.remove(); onClose && onClose(); }
-    return { overlay, modal: m, close };
-  }
-  function countdownModal({ title, body, foot, seconds = 5 }) {
-    const notice = el('div', { class: 'notice danger' });
-    const wrap = el('div', {}, notice);
-    const m = modal({ title, sub: body, body: wrap, vert: true });
-    let left = seconds;
-    const btns = [];
-    const f = el('div', { class: 'foot' });
-    (foot || []).forEach((fn) => { const b = fn(); btns.push(b); f.appendChild(b); });
-    m.modal.appendChild(f);
-    function tick() {
-      notice.innerHTML = '<b>' + t('paid.wait', { s: left }) + '</b>';
-      btns.forEach((b, i) => { if (i > 1) b.disabled = left > 0; });
-      if (left <= 0) { notice.className = 'notice ok'; notice.innerHTML = '<b>✔</b>'; return; }
-      left--; setTimeout(tick, 1000);
-    }
-    tick();
-    return m;
-  }
-  function md(text) {
-    let s = String(text || '');
+  // ---------------------------------------------------------------- markdown
+  function md(src) {
+    if (!src) return '';
+    let s = String(src);
     const blocks = [];
-    s = s.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => { blocks.push(code); return `\u0000B${blocks.length - 1}\u0000`; });
-    s = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    s = s.replace(/`([^`]+)`/g, '<code>$1</code>')
-      .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
-      .replace(/(^|\W)\*([^*\n]+)\*/g, '$1<i>$2</i>')
-      .replace(/^### (.*)$/gm, '<h4>$1</h4>')
-      .replace(/^## (.*)$/gm, '<h3>$1</h3>')
-      .replace(/^# (.*)$/gm, '<h3>$1</h3>')
-      .replace(/^\s*[-*] (.*)$/gm, '• $1')
-      .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-      .replace(/\n/g, '<br>');
-    s = s.replace(/\u0000B(\d+)\u0000/g, (_, i) => '<pre><code>' + String(blocks[+i]).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</code></pre>');
-    return s;
+    s = s.replace(/```(\w*)\n?([\s\S]*?)```/g, (m, lang, code) => {
+      blocks.push('<pre><code class="lang-' + esc(lang || '') + '">' + esc(code.replace(/\n$/, '')) + '</code></pre>');
+      return '\n\u0000B' + (blocks.length - 1) + '\u0000\n';
+    });
+    s = esc(s);
+    s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+    s = s.replace(/^#{4,6}\s+(.+)$/gm, '<h4>$1</h4>').replace(/^###\s+(.+)$/gm, '<h3>$1</h3>')
+      .replace(/^##\s+(.+)$/gm, '<h2>$1</h2>').replace(/^#\s+(.+)$/gm, '<h2>$1</h2>');
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/(^|\W)\*([^*\n]+)\*/g, '$1<i>$2</i>');
+    s = s.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    s = s.replace(/^\s*&gt;\s?(.*)$/gm, '<blockquote>$1</blockquote>');
+    s = s.replace(/^\s*([-*+])\s+/gm, '• ');
+    s = s.replace(/^\s*(\d+)\.\s+/gm, '$1. ');
+    // tableaux
+    s = s.replace(/^(\|.*\|)\n\|[\s:|-]+\|\n((?:\|.*\|\n?)*)/gm, (m, head, rows) => {
+      const cells = (line) => line.split('|').slice(1, -1).map((c) => c.trim());
+      let out = '<table><thead><tr>' + cells(head).map((c) => '<th>' + c + '</th>').join('') + '</tr></thead><tbody>';
+      rows.trim().split('\n').forEach((row) => { out += '<tr>' + cells(row).map((c) => '<td>' + c + '</td>').join('') + '</tr>'; });
+      return out + '</tbody></table>';
+    });
+    s = s.replace(/\u0000B(\d+)\u0000/g, (m, i) => blocks[Number(i)]);
+    s = s.replace(/^\s*---\s*$/gm, '<hr>');
+    s = s.replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>');
+    return '<p>' + s + '</p>';
   }
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  function copy(text) { navigator.clipboard?.writeText(text).then(() => toast(t('toast.copied'), 'ok')); }
 
-  // ---------------- voice
-  const VOICE_LANGS = { fr: 'fr-FR', en: 'en-US', es: 'es-ES', it: 'it-IT' };
-  function sttLang() { return S.settings.ai.sttLang || VOICE_LANGS[S.settings.lang] || 'fr-FR'; }
-  function createSTT(onText, onEnd, onStart) {
-    const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Rec) return null;
-    const r = new Rec();
-    r.lang = sttLang(); r.continuous = true; r.interimResults = true;
-    let finalTxt = '';
-    r.onresult = (e) => {
-      let interim = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const res = e.results[i];
-        if (res.isFinal) finalTxt += res[0].transcript;
-        else interim += res[0].transcript;
-      }
-      onText(finalTxt + interim, finalTxt);
+  // ---------------------------------------------------------------- voix
+  function speak(text, { onend } = {}) {
+    if (!text || !window.speechSynthesis) { onend && onend(); return; }
+    try {
+      speechSynthesis.cancel();
+      const p = S.settings.profiles[S.settings.activeProfile] || {};
+      const u = new SpeechSynthesisUtterance(String(text).replace(/```[\s\S]*?```/g, ' ').replace(/[*#`>]/g, '').slice(0, 5000));
+      u.lang = VOICE_LANGS[S.settings.lang] || 'fr-FR';
+      u.rate = p.voiceRate || 1;
+      u.pitch = p.voicePitch || 1;
+      if (p.voice) { const v = speechSynthesis.getVoices().find((x) => x.name === p.voice); if (v) u.voice = v; }
+      u.onend = () => onend && onend();
+      u.onerror = () => onend && onend();
+      speechSynthesis.speak(u);
+    } catch { onend && onend(); }
+  }
+  const stopSpeak = () => { try { speechSynthesis.cancel(); } catch {} };
+
+  function createSTT(onPartial, onFinal) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return null;
+    const rec = new SR();
+    rec.lang = S.settings.ai.sttLang || VOICE_LANGS[S.settings.lang] || 'fr-FR';
+    rec.continuous = true; rec.interimResults = true;
+    rec.onresult = (e) => {
+      let full = '';
+      for (let i = 0; i < e.results.length; i++) full += e.results[i][0].transcript;
+      const last = e.results[e.results.length - 1];
+      if (last.isFinal) { onFinal && onFinal(full.trim()); rec.stop(); }
+      else onPartial && onPartial(full);
     };
-    r.onerror = () => {};
-    r.onstart = () => onStart && onStart();
-    r.onend = () => onEnd && onEnd(finalTxt);
-    return r;
+    rec.onerror = () => {};
+    return rec;
   }
-  function speak(text, opts = {}) {
-    if (!window.speechSynthesis) { toast('Speech synthesis unavailable', 'err'); return; }
-    const p = S.settings.profiles[S.settings.activeProfile] || {};
-    const u = new SpeechSynthesisUtterance(String(text).replace(/```[\s\S]*?```/g, ' code ').slice(0, 4000));
-    u.lang = VOICE_LANGS[S.settings.lang] || 'fr-FR';
-    u.rate = p.voiceRate || 1; u.pitch = p.voicePitch || 1;
-    if (p.voice) { const v = speechSynthesis.getVoices().find((x) => x.name === p.voice); if (v) u.voice = v; }
-    if (opts.onend) u.onend = opts.onend;
-    speechSynthesis.cancel();
-    speechSynthesis.speak(u);
-  }
-  function stopSpeak() { try { speechSynthesis.cancel(); } catch {} }
 
-  // ---------------- cloud sync
-  let pushTimer = null;
-  function cloudPush() {
-    if (!S.auth?.token || S.auth.guest) return;
-    clearTimeout(pushTimer);
-    pushTimer = setTimeout(async () => {
-      try {
-        await API.call('/api/auth/cloud', { method: 'POST', body: { key: 'settings', value: S.settings } });
-        await API.call('/api/auth/cloud', { method: 'POST', body: { key: 'convs', value: S.conv.slice(0, 60) } });
-        await API.call('/api/auth/cloud', { method: 'POST', body: { key: 'mem', value: S.mem } });
-        await API.call('/api/auth/cloud', { method: 'POST', body: { key: 'skills', value: S.skills } });
-      } catch {}
-    }, 1500);
-  }
+  // ---------------------------------------------------------------- cloud
   async function cloudPull() {
     if (!S.auth?.token || S.auth.guest) return;
-    try {
-      const r = await API.call('/api/auth/cloud');
-      if (r.cloud?.settings) S.settings = deepMerge(DEFAULTS(), r.cloud.settings);
-      if (Array.isArray(r.cloud?.convs) && r.cloud.convs.length) S.conv = r.cloud.convs;
-      if (Array.isArray(r.cloud?.mem)) S.mem = r.cloud.mem;
-      if (Array.isArray(r.cloud?.skills) && r.cloud.skills.length) S.skills = r.cloud.skills;
-    } catch {}
+    const r = await API.call('/api/auth/cloud');
+    const c = r.cloud || {};
+    if (c.openrouterKey && !S.key) { S.key = c.openrouterKey; LS.setRaw('key', S.key); }
+    if (c.openrouterModel && !S.model) { S.model = c.openrouterModel; S.settings.ai.model = S.model; save('settings'); }
+    if (c.settings) { S.settings = Object.assign(DEFAULTS(), c.settings); save('settings'); }
+  }
+  async function cloudPush() {
+    if (!S.auth?.token || S.auth.guest) return;
+    await API.call('/api/auth/cloud', { method: 'POST', body: { key: 'settings', value: S.settings } });
   }
 
-  window.J = { LS, S, t, applyI18n, setLang, applyTheme, el, toast, modal, countdownModal, md, esc, copy, API, save, onSave, DEFAULTS, DEFAULT_PROFILE, deepMerge, createSTT, speak, stopSpeak, sttLang, cloudPush, cloudPull, VOICE_LANGS };
+  // ---------------------------------------------------------------- icônes
+  const ico = (name, size = 18, cls = '') => {
+    const set = window.ICONS || {};
+    const d = set[name] || set.circle;
+    return `<svg class="ic ${cls}" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
+  };
+  const icon = (name, size = 18, cls = '') => {
+    const wrap = document.createElement('span');
+    wrap.style.cssText = 'display:inline-flex;align-items:center';
+    wrap.innerHTML = ico(name, size, cls);
+    return wrap.firstChild;
+  };
+
+  // ---------------------------------------------------------------- fond
+  function startBg() {
+    const cv = document.querySelector('#bg canvas');
+    if (!cv || !S.settings.global.particles) return;
+    let ctx = null;
+    try { ctx = cv.getContext('2d'); } catch {}
+    if (!ctx) return;
+    let w, h, pts;
+    const size = () => {
+      w = cv.width = innerWidth; h = cv.height = innerHeight;
+      pts = Array.from({ length: Math.min(70, Math.round(w / 22)) }, () => ({ x: Math.random() * w, y: Math.random() * h, r: Math.random() * 1.6 + 0.4, vy: Math.random() * 0.22 + 0.05, vx: (Math.random() - 0.5) * 0.12 }));
+    };
+    size();
+    addEventListener('resize', size);
+    const loop = () => {
+      ctx.clearRect(0, 0, w, h);
+      const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#22d3ee';
+      ctx.fillStyle = accent;
+      pts.forEach((p) => {
+        p.x += p.vx; p.y -= p.vy;
+        if (p.y < -6) { p.y = h + 6; p.x = Math.random() * w; }
+        ctx.globalAlpha = 0.35;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+      });
+      requestAnimationFrame(loop);
+    };
+    loop();
+  }
+
+  const copy = (s) => { try { navigator.clipboard.writeText(String(s)); } catch {} };
+
+  window.LANGS = LANGS;
+  window.J = {
+    S, t, el, esc, save, toast, modal, countdownModal, API, md, applyTheme, applyI18n, setLang, LS,
+    DEFAULTS, DEFAULT_PROFILE, LANGS, VOICE_LANGS, ico, icon, speak, stopSpeak, createSTT,
+    cloudPull, cloudPush, copy, startBg,
+    get state() { return S; },
+  };
+  document.addEventListener('DOMContentLoaded', () => { document.documentElement.lang = S.settings.lang; applyI18n(document); startBg(); });
 })();

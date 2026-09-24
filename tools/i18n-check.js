@@ -5,6 +5,7 @@ const ROOT = path.join(__dirname, '..');
 
 global.window = {};
 require(path.join(ROOT, 'public/js/i18n.js'));
+require(path.join(ROOT, 'public/js/i18n.extra.js'));
 const I18N = global.window.I18N;
 const LANGS = ['fr', 'en', 'es', 'it'];
 
@@ -14,7 +15,7 @@ for (const f of ['public/index.html']) {
   for (const m of txt.matchAll(/data-i18n(?:-ph|-title)?="([^"]+)"/g)) used.add(m[1]);
 }
 for (const f of fs.readdirSync(path.join(ROOT, 'public/js'))) {
-  if (f === 'i18n.js') continue;
+  if (f === 'i18n.js' || f === 'i18n.extra.js') continue;
   const txt = fs.readFileSync(path.join(ROOT, 'public/js', f), 'utf8');
   for (const m of txt.matchAll(/\bt\(\s*['"]([a-zA-Z0-9_.]+)['"]/g)) used.add(m[1]);
   for (const m of txt.matchAll(/'(set|nav|tab|mode|model|paid|batch|voice|live|img|vid|qual|cmp|off|priv|rag|skill|approval|memory|hist|console|bridge|toast|common|auth|land|lp)\.[a-zA-Z0-9_.]+'/g)) used.add(m[0].slice(1, -1));

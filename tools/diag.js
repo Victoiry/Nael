@@ -1,21 +1,20 @@
-const chromium = require('@sparticuz/chromium').default || require('@sparticuz/chromium');
-const puppeteer = require('puppeteer-core');
+const { launch } = require('./browser');
 (async () => {
-  const browser = await puppeteer.launch({ args: [...chromium.args, '--no-sandbox', '--disable-gpu', '--single-process', '--no-zygote', '--disable-dev-shm-usage'], executablePath: await chromium.executablePath(), headless: true });
+  const browser = await launch();
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 800 });
   await page.goto('http://localhost:8787/', { waitUntil: 'load' });
-  await page.evaluate(() => { localStorage.setItem('jarvis:key', JSON.stringify('sk-or-v1-x')); localStorage.setItem('jarvis:choseMode','true'); });
+  await page.evaluate(() => { localStorage.setItem('jarvis.key', JSON.stringify('sk-or-v1-x')); localStorage.setItem('jarvis.choseMode','true'); });
   await page.reload({ waitUntil: 'load' });
   await new Promise((r) => setTimeout(r, 600));
   await page.evaluate(() => window.App.enterApp());
   await new Promise((r) => setTimeout(r, 1400));
   const d = await page.evaluate(() => {
     const R = (s) => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); return `${Math.round(r.y)}..${Math.round(r.bottom)} (h=${Math.round(r.height)})`; };
-    const top = document.getElementById('topbar'), tabs = document.getElementById('main-tabs');
+    const top = document.getElementById('chat-header'), tabs = document.getElementById('main-tabs');
     return {
       cls: top.className, vh: innerHeight,
-      topbar: R('#topbar'), grid: R('#main-grid'), maincol: R('#main-col'), chatScroll: R('#chat-scroll'), composer: R('#composer'),
+      topbar: R('#chat-header'), grid: R('#main-grid'), maincol: R('#main-col'), chatScroll: R('#chat-scroll'), composer: R('#composer'),
       tabsClient: tabs.clientWidth, tabsScroll: tabs.scrollWidth, topClient: top.clientWidth, topScroll: top.scrollWidth,
       wsH: getComputedStyle(document.getElementById('workspace')).height,
       cols: getComputedStyle(document.getElementById('main-grid')).gridTemplateColumns,
@@ -25,7 +24,7 @@ const puppeteer = require('puppeteer-core');
       }),
       panelwVar: getComputedStyle(document.documentElement).getPropertyValue('--panelw'),
       measure: (() => {
-        const top = document.getElementById('topbar'), tabs = document.getElementById('main-tabs');
+        const top = document.getElementById('chat-header'), tabs = document.getElementById('main-tabs');
         const cls = top.className;
         const val = { cls, topClient: top.clientWidth, topScroll: top.scrollWidth, tabsClient: tabs.clientWidth, tabsScroll: tabs.scrollWidth };
         top.classList.remove('compact', 'tight');

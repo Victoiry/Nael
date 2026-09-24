@@ -1,132 +1,114 @@
-/* JARVIS — chat : compositeur, effort, modèles, vocal, live, RAG, skills, onglets */
+/* JARVIS — chat : composeur, modèles, effort, vocal, live, RAG, skills, modes */
 (function () {
-  const { S, t, el, save, toast, modal, API, md, esc, countdownModal } = window.J;
+  const { S, t, el, save, toast, modal, API, md, esc, countdownModal, ico, icon } = window.J;
 
   const PRESET_SKILLS = [
-    { id: 'sk1', name: 'Traducteur', instr: 'Traduis tout ce que je te donne en conservant le ton et les nuances.', icon: '🌍' },
-    { id: 'sk2', name: 'Rédacteur', instr: 'Rédige des textes clairs, structurés et convaincants.', icon: '✍️' },
-    { id: 'sk3', name: 'Revue de code', instr: 'Analyse le code, trouve les bugs, propose des améliorations concrètes.', icon: '🐞' },
-    { id: 'sk4', name: 'Chercheur', instr: 'Cherche, croise les sources et donne une synthèse sourcée.', icon: '🔎' },
-    { id: 'sk5', name: 'Coach', instr: 'Aide-moi à progresser avec un plan d\'action étape par étape.', icon: '🎯' },
-    { id: 'sk6', name: 'Data analyste', instr: 'Analyse les données, calcule, et présente les résultats en tableaux.', icon: '📊' },
-    { id: 'sk7', name: 'Mathématicien', instr: 'Résous les problèmes étape par étape en justifiant chaque calcul.', icon: '➗' },
-    { id: 'sk8', name: 'Résumeur', instr: 'Résume en points clés, sans perdre l\'essentiel.', icon: '📝' },
+    { id: 'sk1', name: 'Traducteur', instr: 'Traduis tout ce que je te donne en conservant le ton et les nuances.' },
+    { id: 'sk2', name: 'Rédacteur', instr: 'Rédige des textes clairs, structurés et convaincants.' },
+    { id: 'sk3', name: 'Revue de code', instr: 'Analyse le code, trouve les bugs, propose des améliorations concrètes.' },
+    { id: 'sk4', name: 'Chercheur', instr: 'Cherche, croise les sources et donne une synthèse sourcée.' },
+    { id: 'sk5', name: 'Coach', instr: 'Aide-moi à progresser avec un plan d\'action étape par étape.' },
+    { id: 'sk6', name: 'Data analyste', instr: 'Analyse les données, calcule, présente les résultats en tableaux.' },
+    { id: 'sk7', name: 'Mathématicien', instr: 'Résous les problèmes étape par étape en justifiant chaque calcul.' },
+    { id: 'sk8', name: 'Résumeur', instr: 'Résume en points clés, sans perdre l\'essentiel.' },
   ];
   const CTX = { ragFiles: [], ragWeb: [], ragNotes: [], files: [], skills: [] };
   const MODELS = { list: [], loaded: false };
-  const V = { on: false, live: false, stream: null, interim: '', sending: false, loop: false };
+  const V = { on: false, live: false, stream: null, sending: false, loop: false };
 
-  function profile() { return S.settings.profiles[S.settings.activeProfile] || {}; }
-  function activeModel() { return S.settings.ai.model || S.model || MODELS.list[0]?.id || 'meta-llama/llama-3.3-70b-instruct:free'; }
-  function modelInfo(id) { return MODELS.list.find((m) => m.id === id); }
+  const EFFORTS = ['ultra_saver', 'mini', 'normal', 'high', 'very_high', 'max', 'ultra'];
+  const WARN = ['high', 'very_high', 'max', 'ultra'];
+  const TABS = [
+    ['classic', 'nav.new', 'chat'], ['multitask', 'tab.multitask', 'grid'], ['compare', 'tab.compare', 'scale'],
+    ['code', 'tab.code', 'code'], ['private', 'tab.private', 'shield'], ['offline', 'tab.offline', 'offline'],
+    ['image', 'tab.image', 'image'], ['video', 'tab.video', 'film'],
+  ];
 
-  // ---------------------------------------------------------------- composer
+  const profile = () => S.settings.profiles[S.settings.activeProfile] || {};
+  const firstFree = () => (MODELS.list.find((m) => m.free) || MODELS.list[0] || {}).id;
+  const activeModel = () => S.settings.ai.model || S.model || firstFree() || 'meta-llama/llama-3.3-70b-instruct:free';
+  const modelInfo = (id) => MODELS.list.find((m) => m.id === id);
+
+  // ------------------------------------------------------------ composeur
   function buildComposer() {
     const c = document.getElementById('composer');
+    if (!c) return;
     c.innerHTML = '';
     const wrap = el('div', { class: 'wrap' });
-    const chips = el('div', { class: 'ctx-chips', id: 'ctx-chips' });
-    const box = el('div', { class: 'box glass' });
+    const chips = el('div', { class: 'ctx-chips' });
+    const box = el('div', { class: 'box' });
 
-    // ---- left tools (+) ----
-    const plus = el('button', { class: 'icon-btn tip', 'data-tip': t('msg.plus'), html: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>' });
+    const plus = el('button', { class: 'ibtn tip', 'data-tip': t('msg.plus') }, icon('plus', 19));
     plus.addEventListener('click', (e) => { e.stopPropagation(); openPlusMenu(plus); });
-    const left = el('div', { class: 'tools' }, plus);
 
-    // ---- textarea ----
     const ta = el('textarea', { id: 'input', placeholder: t('msg.placeholder'), rows: 1 });
-    ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 220) + 'px'; });
+    ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 200) + 'px'; });
     ta.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey && S.settings.ai.enterSend) { e.preventDefault(); send(); }
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); }
     });
 
-    // ---- right tools ----
-    const right = el('div', { class: 'right' });
+    const effortBtn = el('button', { class: 'btn sm ghost tip', 'data-tip': t('effort.label') }, icon('sliders', 15), el('span', { class: 'effort-lbl', text: t('effort.' + (S.settings.ai.effort || 'normal')) }));
+    effortBtn.addEventListener('click', (e) => { e.stopPropagation(); openEffortMenu(effortBtn); });
 
-    // effort
-    const effBtn = el('button', { class: 'btn sm tip', 'data-tip': t('effort.label'), text: '⚙ ' + t('effort.' + (S.settings.ai.effort || 'normal')) });
-    effBtn.addEventListener('click', (e) => { e.stopPropagation(); openEffortMenu(effBtn); });
-    const effortWrap = el('div', { class: 'tip', style: 'display:inline-block' }, effBtn);
-
-    // models
-    const modelBtn = el('button', { class: 'btn sm tip', 'data-tip': t('model.selected'), text: shortModel(activeModel()) });
-    modelBtn.addEventListener('click', (e) => { e.stopPropagation(); openModelMenu(modelBtn); });
-
-    // voice
-    const voiceBtn = el('button', { class: 'icon-btn tip', id: 'voice-btn', 'data-tip': t('msg.voice'), html: '<svg viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z"/><path d="M19 11a7 7 0 0 1-14 0"/><path d="M12 18v3"/></svg>' });
+    const voiceBtn = el('button', { class: 'ibtn tip', id: 'voice-btn', 'data-tip': t('msg.voice') }, icon('mic', 19));
     voiceBtn.addEventListener('click', () => toggleVoice());
 
-    // live
-    const liveBtn = el('button', { class: 'icon-btn tip', id: 'live-btn', 'data-tip': t('msg.live') + ' — ' + t('msg.live.hint'), html: '<svg viewBox="0 0 24 24"><rect x="2" y="6" width="13" height="12" rx="2"/><path d="M15 10l7-4v12l-7-4"/></svg>' });
+    const liveBtn = el('button', { class: 'ibtn tip', id: 'live-btn', 'data-tip': t('msg.live') }, icon('camera', 19));
     liveBtn.addEventListener('click', () => toggleLive());
 
-    // send / stop
-    const sendBtn = el('button', { class: 'icon-btn tip', id: 'send-btn', 'data-tip': t('msg.send'), html: '<svg viewBox="0 0 24 24"><path d="M4 12l16-8-6 8 6 8z"/></svg>' });
-    sendBtn.addEventListener('click', () => { if (S.abort) { API.stop(); } else send(); });
+    const sendBtn = el('button', { class: 'ibtn tip', id: 'send-btn', 'data-tip': t('msg.send'), style: 'color:var(--accent)' }, icon('send', 19));
+    sendBtn.addEventListener('click', () => { if (S.abort) API.stop(); else send(); });
 
-    right.append(effortWrap, modelBtn, voiceBtn, liveBtn, sendBtn);
-    box.append(left, ta, right);
+    box.append(el('div', { class: 'tools' }, plus), ta, el('div', { class: 'right' }, effortBtn, voiceBtn, liveBtn, sendBtn));
+    const hint = el('div', { class: 'composer-hint' },
+      el('span', { text: t('effort.label') + ' : ' + t('effort.' + S.settings.ai.effort) + (WARN.includes(S.settings.ai.effort) ? ' — ' + t('effort.more') : '') }),
+      el('span', { text: t(S.settings.ai.enterSend ? 'msg.enter' : 'msg.enterCtrl') }));
 
-    // ---- bottom quick bar ----
-    const quick = el('div', { class: 'quickbar' });
-    const qb = (label, icon, fn, cls = '') => { const b = el('button', { class: 'btn sm ' + cls, html: icon + ' ' + esc(label) }); b.addEventListener('click', fn); return b; };
-    quick.append(
-      qb(t('img.title'), '🖼️', () => window.Media.open('image')),
-      qb(t('vid.title'), '🎬', () => window.Media.open('video')),
-      qb(t('tab.multitask'), '🧩', () => setTab('multitask')),
-      qb(t('tab.compare'), '⚖️', () => setTab('compare')),
-      qb(t('tab.code'), '⌨️', () => setTab('code')),
-      qb(t('tab.private'), '🕵️', () => setTab('private'), 'priv'),
-      qb(t('tab.offline'), '📴', () => setTab('offline')),
-    );
-    const hint = el('div', { class: 'composer-hint', text: (S.settings.ai.enterSend ? 'Enter ↵' : 'Ctrl+Enter ↵') + ' · ' + t('effort.label') + ': ' + t('effort.' + S.settings.ai.effort) });
-
-    wrap.append(chips, box, quick, hint);
+    wrap.append(chips, box, hint);
     c.appendChild(wrap);
     Chat.ta = ta;
     renderChips();
   }
 
-  function shortModel(id) { const m = modelInfo(id); const n = m ? m.name : id; return (m && !m.free ? '💳 ' : '🆓 ') + (n.length > 26 ? n.slice(0, 24) + '…' : n); }
-
   function renderChips() {
-    const box = document.getElementById('ctx-chips');
+    const box = document.querySelector('#composer .ctx-chips');
     if (!box) return;
     box.innerHTML = '';
-    const add = (label, onX, cls = '') => {
-      const c = el('span', { class: 'chip ' + cls }, el('span', { text: label }));
-      const x = el('button', { class: 'btn sm', style: 'padding:0 .3rem;border:0;background:none', text: '✕' });
+    const add = (label, onX, cls = '', ic = 'clip') => {
+      const chip = el('span', { class: 'chip ' + cls }, icon(ic, 13), el('span', { text: label }));
+      const x = el('button', { class: 'ibtn', style: 'width:18px;height:18px' }, icon('close', 12));
       x.addEventListener('click', () => { onX(); renderChips(); });
-      c.appendChild(x); box.appendChild(c);
+      chip.appendChild(x); box.appendChild(chip);
     };
-    CTX.ragFiles.forEach((f, i) => add('📄 ' + f.name, () => CTX.ragFiles.splice(i, 1)));
-    CTX.ragWeb.forEach((w, i) => add('🌐 ' + w.url.slice(0, 28), () => CTX.ragWeb.splice(i, 1)));
-    CTX.ragNotes.forEach((n, i) => add('📝 ' + n.slice(0, 24), () => CTX.ragNotes.splice(i, 1)));
-    CTX.files.forEach((f, i) => add('📎 ' + f.name, () => CTX.files.splice(i, 1)));
-    CTX.skills.forEach((s, i) => add('⚡ ' + s.name, () => CTX.skills.splice(i, 1), 'free'));
-    if (S.private) add('🕵️ ' + t('priv.title'), () => setTab('classic'), 'danger');
+    CTX.ragFiles.forEach((f, i) => add(f.name, () => CTX.ragFiles.splice(i, 1), '', 'folder'));
+    CTX.ragWeb.forEach((w, i) => add(w.url.slice(0, 30), () => CTX.ragWeb.splice(i, 1), '', 'globe'));
+    CTX.ragNotes.forEach((n, i) => add(n.slice(0, 26), () => CTX.ragNotes.splice(i, 1), '', 'book'));
+    CTX.files.forEach((f, i) => add(f.name, () => CTX.files.splice(i, 1), '', 'clip'));
+    CTX.skills.forEach((s, i) => add(s.name, () => CTX.skills.splice(i, 1), 'free', 'bolt'));
+    if (S.private) add(t('tab.private'), () => setTab('classic'), 'danger', 'shield');
+    if (S.tab !== 'classic') add(t('tab.' + S.tab), () => setTab('classic'), '', 'layers');
   }
 
-  // ---------------------------------------------------------------- menus
-  function menuAt(anchor, items) {
+  // ------------------------------------------------------------ menus
+  function menuAt(anchor, items, width = 260) {
     document.querySelectorAll('.popmenu').forEach((m) => m.remove());
-    const m = el('div', { class: 'popmenu glass', style: 'position:fixed;z-index:50;padding:.4rem;min-width:240px;max-height:70vh;overflow:auto' });
+    const m = el('div', { class: 'popmenu', style: `min-width:${width}px;max-height:70vh;width:max-content` });
     items.forEach((it) => {
-      if (it.hr) { m.appendChild(el('div', { style: 'height:1px;background:var(--border);margin:.35rem 0' })); return; }
-      const row = el('div', { class: 'model-row', style: 'border:0;border-radius:10px' });
-      if (it.radio !== undefined) row.appendChild(el('span', { class: 'radio' + (it.active ? '' : ''), style: it.active ? 'border-color:var(--accent);background:var(--accent)' : '' }));
+      if (it.hr) { m.appendChild(el('div', { style: 'height:1px;background:var(--border);margin:.3rem .2rem' })); return; }
+      const row = el('div', { class: 'model-row' + (it.active ? ' active' : '') });
+      if (it.radio) row.appendChild(el('span', { class: 'radio' }));
+      else if (it.icon) row.appendChild(icon(it.icon, 17));
       row.appendChild(el('div', { class: 'nm' },
-        el('b', { html: it.html || esc(it.label) }),
-        it.sub ? el('small', { html: it.sub }) : null,
-        it.warn ? el('small', { class: 'bold-red', text: '⚠ ' + it.warn }) : null));
+        el('b', { html: it.label }),
+        it.sub ? el('small', { text: it.sub }) : null));
       if (it.tag) row.appendChild(el('span', { class: 'chip ' + (it.tagClass || ''), text: it.tag }));
       row.addEventListener('click', () => { m.remove(); it.onClick && it.onClick(); });
       m.appendChild(row);
     });
     document.body.appendChild(m);
     const r = anchor.getBoundingClientRect();
-    const top = Math.min(r.bottom + 6, innerHeight - m.offsetHeight - 10);
+    const top = Math.min(r.bottom + 6, innerHeight - m.offsetHeight - 8);
     m.style.top = Math.max(8, top) + 'px';
     m.style.left = Math.max(8, Math.min(r.left, innerWidth - m.offsetWidth - 10)) + 'px';
     setTimeout(() => {
@@ -135,130 +117,150 @@
     }, 0);
   }
 
-  const EFFORTS = ['ultra_saver', 'mini', 'normal', 'high', 'very_high', 'max', 'ultra'];
-  const WARN = ['high', 'very_high', 'max', 'ultra'];
   function openEffortMenu(anchor) {
-    const items = EFFORTS.map((k) => ({
-      label: t('effort.' + k), active: S.settings.ai.effort === k,
-      sub: t('effort.note.' + (k === 'ultra_saver' ? 'ultra_saver' : k === 'mini' ? 'mini' : k === 'normal' ? 'normal' : 'normal')),
-      warn: WARN.includes(k) ? t('effort.more') : (k === 'ultra_saver' || k === 'mini' ? t('effort.less') : ''),
-      tag: k === 'ultra_saver' ? '🐢💾' : WARN.includes(k) ? '🔥' : '',
+    menuAt(anchor, EFFORTS.map((k) => ({
+      label: t('effort.' + k), active: S.settings.ai.effort === k, radio: true,
+      sub: WARN.includes(k) ? t('effort.more') : (k === 'ultra_saver' || k === 'mini' ? t('effort.less') : t('effort.note.normal')),
+      tag: WARN.includes(k) ? () => '' : '',
       onClick: () => {
-        if (WARN.includes(k) && (S.settings.ai.effort !== k)) {
+        if (WARN.includes(k) && S.settings.ai.effort !== k) {
           modal({ title: t('effort.warn.title'), sub: t('effort.warn.body', { level: t('effort.' + k) }),
             body: el('div', { class: 'notice warn', text: t('effort.more') }),
             foot: [el('button', { class: 'btn', text: t('common.cancel'), onclick: () => document.querySelector('.overlay').remove() }),
               el('button', { class: 'btn primary', text: t('common.ok'), onclick: () => { document.querySelector('.overlay').remove(); applyEffort(k); } })] });
         } else applyEffort(k);
       },
-    }));
-    menuAt(anchor, items);
+    })), 300);
   }
-  function applyEffort(k) { S.settings.ai.effort = k; save('settings'); buildComposer(); }
+  const applyEffort = (k) => { S.settings.ai.effort = k; save('settings'); buildComposer(); };
 
   async function loadModels(force) {
     if (MODELS.loaded && !force) return MODELS.list;
     const r = await API.call('/api/models' + (S.key ? '?key=' + encodeURIComponent(S.key) : ''));
     MODELS.list = r.models || [];
     MODELS.loaded = true;
+    // par défaut on reste sur un modèle gratuit (0 € garanti)
+    if (!S.settings.ai.model) {
+      const free = firstFree();
+      if (free) { S.settings.ai.model = free; S.model = free; save('settings'); }
+    }
+    const btn = document.getElementById('model-btn');
+    if (btn && !btn.dataset.bound) {
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', () => openModelMenu(btn));
+    }
+    paintModelButton();
     return MODELS.list;
   }
+  function paintModelButton() {
+    const btn = document.getElementById('model-btn');
+    if (!btn) return;
+    const id = activeModel();
+    const info = modelInfo(id);
+    btn.innerHTML = '';
+    btn.append(icon(info && info.vision ? 'eye' : 'cpu', 16),
+      el('span', { class: 'nm', text: info ? info.name : id }),
+      el('span', { class: 'chip ' + (info && info.free ? 'free' : 'paid'), text: info ? (info.free ? 'FREE' : 'PAID') : '—' }),
+      icon('chevron', 14));
+  }
 
-  async function openModelMenu(anchor) {
-    if (!MODELS.loaded) { toast(t('common.loading')); await loadModels(); }
-    const items = await Promise.all(MODELS.list.slice(0, 80).map(async (m) => ({
-      label: m.name, sub: m.id + ' · ' + (m.context ? (m.context / 1000).toFixed(0) + 'k ctx' : '') + (m.vision ? ' · 👁' : ''),
+  function openModelMenu(anchor) {
+    const items = MODELS.list.slice(0, 80).map((m) => ({
+      label: m.name, sub: m.id + (m.context ? ' · ' + (m.context / 1000).toFixed(0) + 'k' : '') + (m.vision ? ' · ' + t('model.vision') : ' · ' + t('model.novision')),
       tag: m.free ? 'FREE' : 'PAID', tagClass: m.free ? 'free' : 'paid', active: m.id === activeModel(),
       onClick: async () => {
-        if (!m.free) { await paidWarning(m.id); }
+        if (!m.free && !(await paidWarning(m.id))) return;
         S.settings.ai.model = m.id; S.model = m.id; save('settings'); save('model');
         if (S.auth && !S.auth.guest) API.call('/api/auth/provision', { method: 'POST', body: { key: S.key, model: m.id } });
-        buildComposer(); toast(t('model.selected') + ' : ' + m.id, 'ok');
+        paintModelButton(); toast(t('model.selected') + ' : ' + m.id, 'ok');
       },
-    })));
-    items.unshift({ label: '⚙ ' + t('model.title'), sub: t('model.docs'), onClick: () => window.App.openModelTest() });
+    }));
+    items.unshift({ label: t('model.title'), sub: t('model.docs'), icon: 'sliders', onClick: () => window.App.openModelTest(S.key) });
     items.splice(1, 0, { hr: true });
-    menuAt(anchor, items);
+    menuAt(anchor, items, 340);
   }
 
-  function paidWarning(model) {
-    return new Promise((resolve) => {
-      countdownModal({
-        title: t('paid.title'), body: t('paid.body', { model }), seconds: 5,
-        foot: [
-          () => el('button', { class: 'btn', text: t('paid.chooseFree'), onclick: () => { m.close(); resolve(false); } }),
-          () => el('button', { class: 'btn', text: t('common.cancel'), onclick: () => { m.close(); resolve(false); } }),
-          () => el('button', { class: 'btn primary', text: t('common.ok'), onclick: () => { m.close(); resolve(true); } }),
-        ],
-      });
+  const paidWarning = (model) => new Promise((resolve) => {
+    countdownModal({
+      title: t('paid.title'), body: t('paid.body', { model }), seconds: 5,
+      foot: [
+        () => el('button', { class: 'btn', text: t('paid.chooseFree'), onclick: () => { m.close(); resolve(false); } }),
+        () => el('button', { class: 'btn', text: t('common.cancel'), onclick: () => { m.close(); resolve(false); } }),
+        () => el('button', { class: 'btn primary', text: t('common.ok'), onclick: () => { m.close(); resolve(true); } }),
+      ],
     });
-  }
+  });
 
-  // ---------------------------------------------------------------- plus menu
+  // ------------------------------------------------------------ menu +
   function openPlusMenu(anchor) {
     menuAt(anchor, [
-      { label: '📚 ' + t('rag.title'), sub: t('rag.desc'), onClick: () => openRag() },
-      { label: '📎 ' + t('file.title'), sub: t('file.desc'), onClick: () => pickFiles(false) },
-      { label: '⚡ ' + t('skill.title'), sub: t('skill.pre'), onClick: () => openSkills() },
+      { label: t('rag.title'), sub: t('rag.desc'), icon: 'layers', onClick: openRag },
+      { label: t('file.title'), sub: t('file.desc'), icon: 'clip', onClick: () => pickFiles() },
+      { label: t('skill.title'), sub: t('skill.pre'), icon: 'bolt', onClick: openSkills },
       { hr: true },
-      { label: '🧩 ' + t('tab.multitask'), onClick: () => setTab('multitask') },
-      { label: '⚖️ ' + t('tab.compare'), onClick: () => setTab('compare') },
-      { label: '🗂️ ' + t('nav.history'), onClick: () => window.App.showPanel('history') },
-      { label: '🧠 ' + t('nav.memory'), onClick: () => window.App.showPanel('memory') },
-    ]);
+      { label: t('tab.multitask'), icon: 'grid', onClick: () => setTab('multitask') },
+      { label: t('tab.compare'), icon: 'scale', onClick: () => setTab('compare') },
+      { label: t('tab.code'), icon: 'code', onClick: () => setTab('code') },
+      { label: t('tab.private'), sub: t('priv.on'), icon: 'shield', onClick: () => setTab('private') },
+      { label: t('tab.offline'), sub: t('off.desc'), icon: 'offline', onClick: () => setTab('offline') },
+      { hr: true },
+      { label: t('img.title'), icon: 'image', onClick: () => setTab('image') },
+      { label: t('vid.title'), icon: 'film', onClick: () => setTab('video') },
+      { hr: true },
+      { label: t('nav.history'), icon: 'clock', onClick: () => window.App.showPanel('history') },
+      { label: t('nav.memory'), icon: 'brain', onClick: () => window.App.showPanel('memory') },
+    ], 300);
   }
 
   function openRag() {
     const body = el('div', { class: 'col' });
-    const mk = (titleKey, arr, render, inputNode) => {
-      const box = el('div', { class: 'panel-sec' });
-      box.appendChild(el('h4', { text: t(titleKey) + ' (' + arr.length + '/5)' }));
-      const list = el('div', {});
-      arr.forEach((x, i) => list.appendChild(el('div', { class: 'switch-row' },
-        el('div', { class: 'tiny', text: typeof x === 'string' ? x : (x.name || x.url) }),
-        el('button', { class: 'btn sm', text: '✕', onclick: () => { arr.splice(i, 1); m.close(); openRag(); } }))));
-      box.append(list, inputNode);
+    const mk = (titleKey, arr, inputNode, nameOf) => {
+      const box = el('div', { class: 'panel-sec' }, el('h4', { text: t(titleKey) + ' (' + arr.length + '/5)' }));
+      arr.forEach((x, i) => box.appendChild(el('div', { class: 'switch-row' },
+        el('div', { class: 'tiny', text: nameOf(x) }),
+        el('button', { class: 'ibtn', onclick: () => { arr.splice(i, 1); m.close(); openRag(); } }, icon('trash', 15)))));
+      box.appendChild(inputNode);
       return box;
     };
     const fileInput = el('input', { type: 'file', multiple: true, accept: '.txt,.md,.json,.csv,.js,.ts,.py,.html,.css,.pdf,.docx' });
     fileInput.addEventListener('change', async () => {
       for (const f of fileInput.files) {
-        if (CTX.ragFiles.length >= 5) return toast(t('rag.limited'), 'err');
+        if (CTX.ragFiles.length >= 5) { toast(t('rag.limited'), 'err'); break; }
         CTX.ragFiles.push({ name: f.name, text: (await f.text()).slice(0, 120000) });
       }
-      toast(t('toast.saved'), 'ok'); m.close(); openRag();
+      toast(t('toast.saved'), 'ok'); m.close(); renderChips();
     });
     const urlIn = el('input', { type: 'url', placeholder: t('rag.addurl') });
     urlIn.addEventListener('keydown', async (e) => {
-      if (e.key !== 'Enter') return;
+      if (e.key !== 'Enter' || !urlIn.value.trim()) return;
       if (CTX.ragWeb.length >= 5) return toast(t('rag.limited'), 'err');
-      const u = urlIn.value.trim(); if (!u) return;
-      CTX.ragWeb.push({ url: u, text: '' }); m.close(); openRag(); toast(t('common.loading'));
-      try { const r = await fetch('https://r.jina.ai/' + u); const tx = await r.text(); CTX.ragWeb[CTX.ragWeb.length - 1].text = tx.slice(0, 60000); toast(t('toast.saved'), 'ok'); renderChips(); }
+      const u = urlIn.value.trim();
+      CTX.ragWeb.push({ url: u, text: '' }); urlIn.value = ''; renderChips(); toast(t('common.loading'));
+      try { const r = await fetch('https://r.jina.ai/' + u); CTX.ragWeb[CTX.ragWeb.length - 1].text = (await r.text()).slice(0, 60000); toast(t('toast.saved'), 'ok'); }
       catch { try { const r2 = await fetch(u); CTX.ragWeb[CTX.ragWeb.length - 1].text = (await r2.text()).slice(0, 60000); } catch { toast(t('toast.error'), 'err'); } }
     });
     const noteIn = el('input', { type: 'text', placeholder: t('rag.addnote') });
-    noteIn.addEventListener('keydown', (e) => { if (e.key === 'Enter' && noteIn.value.trim()) { if (CTX.ragNotes.length >= 5) return toast(t('rag.limited'), 'err'); CTX.ragNotes.push(noteIn.value.trim()); m.close(); openRag(); renderChips(); } });
-
+    noteIn.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || !noteIn.value.trim()) return;
+      if (CTX.ragNotes.length >= 5) return toast(t('rag.limited'), 'err');
+      CTX.ragNotes.push(noteIn.value.trim()); noteIn.value = ''; toast(t('toast.saved'), 'ok'); renderChips();
+    });
     body.append(
-      mk('rag.files', CTX.ragFiles, null, fileInput),
-      mk('rag.web', CTX.ragWeb, null, urlIn),
-      mk('rag.notes', CTX.ragNotes, null, noteIn));
-    const m = modal({ title: t('rag.title'), sub: t('rag.desc'), body, vert: false, onClose: renderChips });
+      mk('rag.files', CTX.ragFiles, fileInput, (f) => f.name),
+      mk('rag.web', CTX.ragWeb, urlIn, (w) => w.url),
+      mk('rag.notes', CTX.ragNotes, noteIn, (n) => n));
+    const m = modal({ title: t('rag.title'), sub: t('rag.desc'), body, onClose: renderChips });
   }
 
-  function pickFiles(simple) {
+  function pickFiles() {
     const input = el('input', { type: 'file', multiple: true });
     input.addEventListener('change', async () => {
       for (const f of input.files) {
         if (CTX.files.length >= 3) { toast(t('file.limited'), 'err'); break; }
-        const isImg = /^image\//.test(f.type);
-        if (isImg) {
+        if (/^image\//.test(f.type)) {
           const dataUrl = await new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(f); });
           CTX.files.push({ name: f.name, image: dataUrl });
-        } else {
-          CTX.files.push({ name: f.name, text: (await f.text()).slice(0, 120000) });
-        }
+        } else CTX.files.push({ name: f.name, text: (await f.text()).slice(0, 120000) });
       }
       renderChips(); toast(t('toast.saved'), 'ok');
     });
@@ -272,31 +274,30 @@
       mine.querySelectorAll('.switch-row').forEach((e) => e.remove());
       if (!S.skills.length) mine.appendChild(el('div', { class: 'muted tiny', text: t('skill.empty') }));
       S.skills.forEach((s, i) => mine.appendChild(el('div', { class: 'switch-row' },
-        el('div', {}, el('div', { class: 'tiny', text: (s.icon || '⚡') + ' ' + s.name }), el('div', { class: 'tiny muted', text: s.instr.slice(0, 60) })),
+        el('div', {}, el('div', { class: 'tiny', text: s.name }), el('div', { class: 'tiny muted', text: (s.instr || '').slice(0, 60) })),
         el('div', { class: 'row' },
-          el('button', { class: 'btn sm', text: t('common.add'), onclick: () => { addSkillChip(s); m.close(); } }),
-          el('button', { class: 'btn sm danger', text: '✕', onclick: () => { S.skills.splice(i, 1); save('skills'); drawMine(); } })))));
+          el('button', { class: 'btn sm', text: t('common.add'), onclick: () => { add(s); m.close(); } }),
+          el('button', { class: 'ibtn', onclick: () => { S.skills.splice(i, 1); save('skills'); drawMine(); } }, icon('trash', 15))))));
     };
     drawMine();
     const pre = el('div', { class: 'panel-sec' }, el('h4', { text: t('skill.pre') }));
     PRESET_SKILLS.forEach((s) => pre.appendChild(el('div', { class: 'switch-row' },
-      el('div', {}, el('div', { class: 'tiny', text: s.icon + ' ' + s.name }), el('div', { class: 'tiny muted', text: s.instr.slice(0, 58) })),
-      el('button', { class: 'btn sm', text: t('common.add'), onclick: () => { addSkillChip(s); m.close(); } }))));
-
+      el('div', {}, el('div', { class: 'tiny', text: s.name }), el('div', { class: 'tiny muted', text: s.instr.slice(0, 58) })),
+      el('button', { class: 'btn sm', text: t('common.add'), onclick: () => { add(s); m.close(); } }))));
     const name = el('input', { type: 'text', placeholder: t('skill.namet') });
     const instr = el('textarea', { placeholder: t('skill.instrt') });
     const create = el('div', { class: 'panel-sec' }, el('h4', { text: t('skill.create') }), name, instr,
-      el('button', { class: 'btn sm primary', text: t('skill.add'), onclick: () => {
+      el('button', { class: 'btn sm primary', style: 'margin-top:.5rem', text: t('skill.add'), onclick: () => {
         if (!name.value.trim()) return;
-        S.skills.unshift({ id: 'sk' + Date.now(), name: name.value.trim(), instr: instr.value, icon: '⚡' });
+        S.skills.unshift({ id: 'sk' + Date.now(), name: name.value.trim(), instr: instr.value });
         save('skills'); name.value = ''; instr.value = ''; drawMine(); toast(t('toast.saved'), 'ok');
       } }));
-    function addSkillChip(s) { if (!CTX.skills.find((x) => x.name === s.name)) CTX.skills.push(s); renderChips(); }
+    const add = (s) => { if (!CTX.skills.find((x) => x.name === s.name)) CTX.skills.push(s); renderChips(); };
     const m = modal({ title: t('skill.title'), body, vert: true });
     body.append(mine, pre, create);
   }
 
-  // ---------------------------------------------------------------- context build
+  // ------------------------------------------------------------ contexte
   function contextBlock() {
     const parts = [];
     const p = profile();
@@ -315,58 +316,69 @@
   function currentConv() {
     let c = S.conv.find((x) => x.id === S.activeId);
     if (!c) {
-      c = { id: 'c' + Date.now(), title: t('nav.new'), mode: S.mode, messages: [], at: Date.now(), private: S.private };
+      c = { id: 'c' + Date.now(), title: t('nav.new'), mode: S.mode, messages: [], at: Date.now() };
       if (!S.private) { S.conv.unshift(c); S.activeId = c.id; save('conv'); }
       else S.privateConv = c;
     }
     return c;
   }
 
-  // ---------------------------------------------------------------- render messages
-  function view() { return document.getElementById('chat-scroll'); }
+  // ------------------------------------------------------------ messages
+  const view = () => document.getElementById('chat-scroll');
   function renderMessages() {
-    const box = view(); if (!box) return;
-    const conv = currentConv();
+    const box = view();
+    if (!box) return;
+    box.classList.remove('grid-mode');
     box.innerHTML = '';
-    if (!conv.messages.length) {
-      box.appendChild(el('div', { class: 'center', style: 'padding:clamp(6px, 5vh, 56px) 0 8px;opacity:.95' },
-        el('div', { style: 'font-size:3rem', text: profile().avatar || '🤖' }),
-        el('h2', { text: t('land.hero') }),
-        el('p', { class: 'muted', text: profile().aiName ? profile().aiName + ' — ' + t('land.sub') : t('land.sub') })));
-      return;
-    }
+    const conv = currentConv();
+    if (!conv.messages.length) return renderWelcome();
     conv.messages.forEach((m) => box.appendChild(node(m)));
     if (S.settings.ai.autoScroll) box.scrollTop = box.scrollHeight;
+  }
+  function renderWelcome() {
+    const box = view();
+    box.classList.remove('grid-mode');
+    box.innerHTML = '';
+    const p = profile();
+    box.appendChild(el('div', { class: 'welcome' },
+      el('div', { class: 'mark' }),
+      el('h2', { text: p.aiName ? p.aiName + ' — ' + t('land.feat1') : t('land.hero') }),
+      el('p', { class: 'tiny', text: t('land.sub') }),
+      el('div', { class: 'row wrap', style: 'justify-content:center;gap:.35rem;margin-top:.4rem' },
+        ...[t('lp.do.d1t'), t('lp.do.d2t'), t('lp.do.d5t'), t('lp.do.d4t')].map((x) => el('span', { class: 'chip', text: x })))));
   }
 
   function node(m) {
     const wrap = el('div', { class: 'msg ' + (m.role === 'user' ? 'user' : 'ai') });
-    const av = el('div', { class: 'av', text: m.role === 'user' ? '🧑' : (profile().avatar || '🤖') });
+    const av = el('div', { class: 'av' }, icon(m.role === 'user' ? 'user' : 'sparkle', 16));
     const bubble = el('div', { class: 'bubble' });
     if (m.reasoning) bubble.appendChild(el('div', { class: 'reason', text: m.reasoning }));
     const content = Array.isArray(m.content) ? m.content.filter((c) => c.type === 'text').map((c) => c.text).join('\n') : m.content;
-    bubble.appendChild(el('div', { class: 'md', html: md(content) }));
+    const body = el('div', { class: 'md', html: md(content || '') });
+    bubble.appendChild(body);
     if (Array.isArray(m.content)) m.content.filter((c) => c.type === 'image_url').forEach((c) => bubble.appendChild(el('img', { src: c.image_url.url, class: 'screen-shot' })));
-    if (m.tools?.length) m.tools.forEach((tl) => bubble.appendChild(el('div', { class: 'tool-line', text: '⌘ ' + tl })));
+    if (m.tools?.length) m.tools.forEach((tl) => bubble.appendChild(el('div', { class: 'tool-line', text: tl })));
     if (m.image) bubble.appendChild(el('img', { src: m.image, class: 'screen-shot' }));
-    const acts = el('div', { class: 'row', style: 'margin-top:.4rem' });
-    acts.appendChild(el('button', { class: 'btn sm ghost', text: '⧉', onclick: () => window.J.copy(content || '') }));
-    if (m.role !== 'user') acts.appendChild(el('button', { class: 'btn sm ghost', text: '🔊', onclick: () => window.J.speak(content || '') }));
-    if (m.role === 'user') acts.appendChild(el('button', { class: 'btn sm ghost', text: '✎', onclick: () => { if (Chat.ta) { Chat.ta.value = content; Chat.ta.focus(); } } }));
-    if (window.App && S.mode === 'agent') acts.appendChild(el('button', { class: 'btn sm ghost', text: '▶ ' + t('code.run'), onclick: () => runOnPC(content) }));
+
+    const acts = el('div', { class: 'msg-actions' });
+    const ab = (ic, title, fn) => { const b = el('button', { class: 'ibtn tip', 'data-tip': title }, icon(ic, 15)); b.addEventListener('click', fn); return b; };
+    acts.appendChild(ab('copy', t('toast.copied'), () => window.J.copy(content || '')));
+    if (m.role !== 'user') acts.appendChild(ab('volume', t('set.ttsAuto'), () => window.J.speak(content || '')));
+    if (m.role === 'user') acts.appendChild(ab('pencil', t('nav.rename'), () => { if (Chat.ta) { Chat.ta.value = content || ''; Chat.ta.focus(); } }));
+    if (S.mode === 'agent' && m.role !== 'user') acts.appendChild(ab('terminal', t('code.run'), () => runOnPC(content || '')));
     bubble.appendChild(acts);
     wrap.append(av, bubble);
     return wrap;
   }
 
   async function runOnPC(text) {
-    const cmd = prompt(t('code.run'), (text.match(/`([^`]+)`/) || [])[1] || '');
+    const cmd = prompt(t('code.run'), (String(text).match(/`([^`]+)`/) || [])[1] || '');
     if (!cmd) return;
     const r = await API.call('/api/bridge/command', { method: 'POST', body: { command: cmd, sessionId: S.bridge.sessionId } });
     toast(t('approval.request') + ' — ' + (r.risk || ''), 'ok');
   }
 
-  // ---------------------------------------------------------------- send
+  // ------------------------------------------------------------ envoi
   async function send(textOverride, opts = {}) {
     const ta = Chat.ta || document.getElementById('input');
     const text = (textOverride !== undefined ? textOverride : ta?.value || '').trim();
@@ -388,54 +400,62 @@
     CTX.files = []; CTX.ragFiles = []; CTX.ragWeb = []; CTX.ragNotes = [];
     if (ta) { ta.value = ''; ta.style.height = 'auto'; }
     renderChips();
-    if (opts.append !== false) { renderMessages(); }
-    else { const b = view(); b.appendChild(node(userMsg)); }
+    const box = view();
+    if (box.querySelector('.welcome')) box.innerHTML = '';
+    box.appendChild(node(userMsg));
 
     const model = opts.model || activeModel();
     const info = modelInfo(model);
     const aiMsg = { role: 'assistant', content: '', reasoning: '', tools: [] };
     conv.messages.push(aiMsg);
     const aiNode = node(aiMsg);
-    view().appendChild(aiNode);
+    box.appendChild(aiNode);
     const bubble = aiNode.querySelector('.bubble');
-    const live = el('div', { class: 'md' }); bubble.insertBefore(live, bubble.firstChild);
+    const live = el('div', { class: 'md' });
+    bubble.insertBefore(live, bubble.firstChild);
     const think = el('div', { class: 'tiny muted dots', text: t('common.thinking') });
     bubble.insertBefore(think, live);
     V.sending = true;
-    const sendBtn = document.getElementById('send-btn');
-    if (sendBtn) sendBtn.classList.add('rec');
+    document.getElementById('send-btn')?.classList.add('rec');
 
     const messages = conv.messages.filter((m) => m !== aiMsg).map((m) => ({ role: m.role, content: m.content }));
     try {
       await API.stream('/api/chat', {
         key: S.key, model,
         messages: S.private ? messages.slice(-4) : messages,
-        effort: S.settings.ai.effort, mode: S.mode,
-        profile: profile(), sessionId: S.bridge.sessionId,
+        effort: S.settings.ai.effort, mode: S.mode, maxTokens: S.settings.ai.maxTokens,
+        profile: profile(), sessionId: S.bridge.sessionId, temperature: S.settings.ai.temperature,
         visionWarning: S.settings.ai.visionWarn && info && !info.vision,
-        temperature: S.settings.ai.temperature,
       }, {
-        delta: (d) => { aiMsg.content += d.text; live.innerHTML = md(aiMsg.content); if (S.settings.ai.autoScroll) view().scrollTop = view().scrollHeight; },
-        reasoning: (d) => { aiMsg.reasoning += d.text; let r = bubble.querySelector('.reason'); if (!r) { r = el('div', { class: 'reason' }); bubble.insertBefore(r, bubble.firstChild); } r.textContent = aiMsg.reasoning; },
+        delta: (d) => { aiMsg.content += d.text; live.innerHTML = md(aiMsg.content); if (S.settings.ai.autoScroll) box.scrollTop = box.scrollHeight; },
+        reasoning: (d) => {
+          aiMsg.reasoning += d.text;
+          let r = bubble.querySelector('.reason');
+          if (!r) { r = el('div', { class: 'reason' }); bubble.insertBefore(r, bubble.firstChild); }
+          r.textContent = aiMsg.reasoning;
+        },
         tool: (d) => {
-          if (d.phase === 'start') { aiMsg.tools.push((d.name || '') + ' ' + (d.args?.command || d.args?.path || d.args?.query || '')); bubble.appendChild(el('div', { class: 'tool-line dots', text: '⌘ ' + d.name + ' ' + (d.args?.command || d.args?.path || d.args?.query || '') })); }
-          else { const lines = bubble.querySelectorAll('.tool-line'); const last = lines[lines.length - 1]; if (last) { last.classList.remove('dots'); last.textContent = '⌘ ' + d.name + ' → ' + String(d.result || '').slice(0, 160); } }
+          if (d.phase === 'start') {
+            aiMsg.tools.push(d.name);
+            bubble.appendChild(el('div', { class: 'tool-line dots', text: d.name + ' ' + (d.args?.command || d.args?.path || d.args?.query || '') }));
+          } else {
+            const lines = bubble.querySelectorAll('.tool-line');
+            const last = lines[lines.length - 1];
+            if (last) { last.classList.remove('dots'); last.textContent = d.name + ' — ' + String(d.result || '').slice(0, 160); }
+          }
         },
         screen: (d) => { if (d.image) { aiMsg.image = d.image; bubble.appendChild(el('img', { src: d.image, class: 'screen-shot' })); } },
         approval: (d) => window.App.showApproval(d),
-        usage: () => {},
-        error: (d) => { aiMsg.content += '\n\n⚠ ' + d.message; live.innerHTML = md(aiMsg.content); },
+        error: (d) => { aiMsg.content += '\n\n' + d.message; live.innerHTML = md(aiMsg.content); },
         done: () => {},
       });
     } catch (e) {
-      if (String(e.name) !== 'AbortError') { aiMsg.content += '\n\n⚠ ' + String(e.message || e); live.innerHTML = md(aiMsg.content); }
+      if (String(e.name) !== 'AbortError') { aiMsg.content += '\n\n' + String(e.message || e); live.innerHTML = md(aiMsg.content); }
     }
     think.remove();
     V.sending = false;
-    sendBtn?.classList.remove('rec');
-    if (!S.private) {
-      if (S.settings.ai.useHistory) { S.hist.unshift({ q: text, a: aiMsg.content.slice(0, 400), at: Date.now(), conv: conv.id }); save('hist'); }
-    }
+    document.getElementById('send-btn')?.classList.remove('rec');
+    if (!S.private && S.settings.ai.useHistory) { S.hist.unshift({ q: text, a: aiMsg.content.slice(0, 400), at: Date.now(), conv: conv.id }); save('hist'); }
     if (S.settings.ai.ttsAuto && !opts.noSpeak) window.J.speak(aiMsg.content);
     conv.at = Date.now();
     save('conv');
@@ -443,19 +463,18 @@
     return aiMsg.content;
   }
 
-  // ---------------------------------------------------------------- voice / live
+  // ------------------------------------------------------------ vocal / live
   function hud(show, text) {
     const h = document.getElementById('voice-hud');
     h.classList.toggle('on', show);
     if (text !== undefined) document.getElementById('hud-text').textContent = text;
     const wave = document.getElementById('wave');
-    if (show && !wave.children.length) for (let i = 0; i < 14; i++) wave.appendChild(el('i', { style: `animation-delay:${i * 0.07}s;height:${10 + Math.random() * 40}px` }));
+    if (show && !wave.children.length) for (let i = 0; i < 14; i++) wave.appendChild(el('i', { style: `animation-delay:${i * 0.06}s` }));
   }
   function toggleVoice() {
-    V.on = !V.on;
-    V.loop = V.on;
+    V.on = !V.on; V.loop = V.on;
     document.getElementById('voice-btn')?.classList.toggle('rec', V.on);
-    if (V.on) { hud(true, t('msg.voice.on')); listenOnce(); } else { stopVoice(); }
+    if (V.on) { hud(true, t('msg.voice.on')); listenOnce(); } else stopVoice();
   }
   function stopVoice() {
     V.on = false; V.loop = false;
@@ -465,11 +484,7 @@
   }
   function listenOnce() {
     if (!V.on) return;
-    const rec = window.J.createSTT((full, finalTxt) => {
-      hud(true, full);
-      if (Chat.ta) Chat.ta.value = full;
-      if (finalTxt && finalTxt.trim().length > 1 && /\b(fini|envoyer|send)\b/i.test(finalTxt) === false) { /* keep listening */ }
-    }, async (finalTxt) => {
+    const rec = window.J.createSTT((full) => { hud(true, full); if (Chat.ta) Chat.ta.value = full; }, async (finalTxt) => {
       const said = (finalTxt || Chat.ta?.value || '').trim();
       if (!said) { if (V.on) setTimeout(listenOnce, 400); return; }
       if (Chat.ta) Chat.ta.value = '';
@@ -489,14 +504,11 @@
       try {
         V.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
         video.srcObject = V.stream; video.classList.remove('hidden');
-        hud(true, t('msg.live'));
-        V.on = true; V.loop = true;
-        liveLoop();
-      } catch (e) { toast(t('live.nocam'), 'err'); V.live = false; }
+        hud(true, t('msg.live')); V.on = true; V.loop = true; liveLoop();
+      } catch { toast(t('live.nocam'), 'err'); V.live = false; }
     } else {
-      V.stream?.getTracks().forEach((t) => t.stop());
-      video.classList.add('hidden'); video.srcObject = null;
-      stopVoice();
+      V.stream?.getTracks().forEach((tr) => tr.stop());
+      video.classList.add('hidden'); video.srcObject = null; stopVoice();
     }
   }
   async function liveLoop() {
@@ -519,40 +531,105 @@
   function grabFrame() {
     const v = document.getElementById('live-video');
     if (!v || !v.videoWidth) return null;
-    const c = document.createElement('canvas'); c.width = 640; c.height = Math.round(640 * v.videoHeight / v.videoWidth);
+    const c = document.createElement('canvas');
+    c.width = 640; c.height = Math.round(640 * v.videoHeight / v.videoWidth);
     c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
     return c.toDataURL('image/jpeg', 0.7);
   }
 
-  // ---------------------------------------------------------------- tabs
-  function setTab(tab) {
-    const wasPrivate = S.private;
-    S.tab = tab;
-    document.querySelectorAll('#chat-tabs .tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
-    S.private = tab === 'private';
-    if (wasPrivate && !S.private) S.activeId = S.conv[0]?.id || null;
-    renderChips();
-    window.Media.close();
-    const host = view();
-    document.getElementById('view-chat').classList.remove('hidden');
-    document.getElementById('studio').classList.add('hidden');
-    document.getElementById('composer').classList.toggle('hidden', tab === 'multitask' || tab === 'compare');
-    if (tab === 'multitask') { loadModels().then(() => renderMultitask(host)); return; }
-    if (tab === 'compare') { loadModels().then(() => renderCompare(host)); return; }
-    renderMessages();
-    if (tab === 'offline') return renderOfflineBar();
-    if (tab === 'private') { toast(t('priv.on')); }
+  // ------------------------------------------------------------ modes
+  function tabList(container) {
+    container.innerHTML = '';
+    TABS.forEach(([key, labelKey, ic]) => {
+      const b = el('button', { class: 'tab' + (S.tab === key ? ' active' : ''), 'data-tab': key }, icon(ic, 16), el('span', { class: 'lbl', text: t(labelKey) }));
+      b.addEventListener('click', () => setTab(key));
+      container.appendChild(b);
+    });
   }
 
-  function renderOfflineBar() {
+  function setTab(tab) {
+    const prev = S.tab;
+    S.tab = tab;
+    S.private = tab === 'private';
+    // le composeur disparaît pour les modes grille et les studios
+    const composer = document.getElementById('composer');
+    composer.classList.toggle('hidden', ['multitask', 'compare'].includes(tab));
+    const studio = document.getElementById('studio');
+    if (studio) { studio.classList.add('hidden'); studio.innerHTML = ''; }
     const box = view();
-    const bar = el('div', { class: 'panel-sec', style: 'margin:0 auto 1rem;max-width:900px' },
+    box.classList.remove('grid-mode');
+    renderChips();
+    tabList(document.getElementById('chat-tabs') || el('div'));
+    const list = document.getElementById('main-tabs');
+    if (list && !list.querySelector('[data-tab]')) { /* le tiroir garde ses sections */ }
+
+    if (tab === 'image' || tab === 'video') return window.Media.open(tab);
+    if (tab === 'multitask' || tab === 'compare') return renderGrid(tab);
+    if (tab === 'offline') return renderOffline();
+    if (tab === 'private' && prev !== 'private') toast(t('priv.on'));
+    renderMessages();
+  }
+
+  function cell(model) {
+    const box = el('div', { class: 'cell' });
+    const sel = el('select');
+    (MODELS.list.length ? MODELS.list : [{ id: model, name: model, free: true }]).slice(0, 60)
+      .forEach((m) => sel.appendChild(el('option', { value: m.id, text: (m.free ? '' : 'PAID · ') + m.name, selected: m.id === model })));
+    sel.addEventListener('change', async () => {
+      const info = modelInfo(sel.value);
+      if (info && !info.free && !(await paidWarning(sel.value))) { sel.value = box.dataset.model; return; }
+      box.dataset.model = sel.value;
+    });
+    box.dataset.model = model;
+    box.appendChild(el('div', { class: 'head' }, sel));
+
+    const body = el('div', { class: 'body' });
+    const input = el('input', { type: 'text', placeholder: t('msg.placeholder') });
+    const go = el('button', { class: 'ibtn', style: 'color:var(--accent)' }, icon('send', 17));
+    const run = async () => {
+      const q = input.value.trim();
+      if (!q) return;
+      input.value = '';
+      body.appendChild(el('div', { class: 'bubble', html: md('**' + t('common.you') + ' :** ' + q) }));
+      const out = el('div', { class: 'bubble', html: '<span class="dots muted"></span>' });
+      body.appendChild(out);
+      let acc = '';
+      try {
+        await API.stream('/api/chat', { key: S.key, model: box.dataset.model, messages: [{ role: 'user', content: q }], effort: S.settings.ai.effort, profile: profile() }, {
+          delta: (d) => { acc += d.text; out.innerHTML = md(acc); },
+          error: (d) => { out.innerHTML += '<br>' + esc(d.message); },
+          done: () => {},
+        });
+      } catch (e) { out.innerHTML = esc(String(e.message || e)); }
+      body.scrollTop = body.scrollHeight;
+    };
+    go.addEventListener('click', run);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && S.settings.ai.enterSend) run(); });
+    box.append(body, el('div', { class: 'inputline' }, input, go));
+    return box;
+  }
+
+  function renderGrid(kind) {
+    const box = view();
+    box.innerHTML = '';
+    box.classList.add('grid-mode');
+    const grid = el('div', { class: 'grid2 ' + (kind === 'multitask' ? 'mt' : 'cmp'), id: 'mt-wrap', style: 'flex:1' });
+    if (kind === 'multitask') grid.append(cell(activeModel()), cell(MODELS.list[1]?.id || activeModel()), cell(MODELS.list[2]?.id || activeModel()), cell(MODELS.list[3]?.id || activeModel()));
+    else grid.append(cell(MODELS.list[0]?.id || activeModel()), cell(MODELS.list[1]?.id || activeModel()));
+    box.appendChild(grid);
+  }
+
+  function renderOffline() {
+    const box = view();
+    box.classList.remove('grid-mode');
+    box.innerHTML = '';
+    const bar = el('div', { class: 'panel-sec', style: 'max-width:780px;margin:0 auto' },
       el('b', { text: t('off.title') }), el('div', { class: 'tiny muted', text: t('off.desc') }),
       el('div', { class: 'row', style: 'margin-top:.5rem' },
         el('input', { type: 'text', id: 'local-url', value: window.J.LS.get('localUrl', 'http://127.0.0.1:11434') }),
         el('button', { class: 'btn sm primary', text: t('off.detect'), onclick: detectLocal })),
       el('div', { id: 'local-list', class: 'tiny muted', style: 'margin-top:.4rem' }));
-    box.prepend(bar);
+    box.appendChild(bar);
   }
   async function detectLocal() {
     const url = document.getElementById('local-url').value.replace(/\/$/, '');
@@ -563,64 +640,29 @@
       const r = await fetch(url + (url.includes('11434') ? '/api/tags' : '/v1/models'));
       const j = await r.json();
       const names = (j.models || j.data || []).map((m) => m.name || m.id);
-      out.innerHTML = names.length ? t('off.found', { n: names.length }) + ' — ' + names.slice(0, 12).join(', ') : t('off.none');
-      if (names.length) { MODELS.list = names.map((n) => ({ id: 'local/' + n, name: n, free: true, vision: true, local: true, url })); MODELS.loaded = true; }
+      out.textContent = names.length ? t('off.found', { n: names.length }) + ' — ' + names.slice(0, 12).join(', ') : t('off.none');
+      if (names.length) { MODELS.list = names.map((n) => ({ id: 'local/' + n, name: n, free: true, vision: true, local: true })); paintModelButton(); }
     } catch { out.textContent = t('off.none'); }
   }
 
-  function cell(model, idx) {
-    const box = el('div', { class: 'cell' });
-    const head = el('div', { class: 'head' });
-    const sel = el('select');
-    MODELS.list.slice(0, 60).forEach((m) => sel.appendChild(el('option', { value: m.id, text: (m.free ? '🆓 ' : '💳 ') + m.name, selected: m.id === model })));
-    sel.addEventListener('change', () => { box.dataset.model = sel.value; if (sel.value && !modelInfo(sel.value)?.free) paidWarning(sel.value); });
-    head.append(sel, el('span', { class: 'spacer' }));
-    const body = el('div', { class: 'body' });
-    const inp = el('div', { class: 'row', style: 'margin-top:.4rem' },
-      el('input', { type: 'text', placeholder: t('msg.placeholder') }),
-      el('button', { class: 'btn sm primary', text: '➤' }));
-    box.dataset.model = model;
-    (async () => {
-      const input = inp.querySelector('input');
-      inp.querySelector('button').addEventListener('click', async () => {
-        const q = input.value.trim(); if (!q) return; input.value = '';
-        body.appendChild(el('div', { class: 'bubble', html: md('**' + t('common.you') + ' :** ' + q) }));
-        const out = el('div', { class: 'bubble', html: '<span class="dots muted"></span>' }); body.appendChild(out);
-        let acc = '';
-        await API.stream('/api/chat', { key: S.key, model: box.dataset.model, messages: [{ role: 'user', content: q }], effort: S.settings.ai.effort, profile: profile() }, {
-          delta: (d) => { acc += d.text; out.innerHTML = md(acc); }, error: (d) => { out.innerHTML += '<br>⚠ ' + esc(d.message); }, done: () => {},
-        });
-        body.scrollTop = body.scrollHeight;
-      });
-    })();
-    box.append(head, body, inp);
-    return box;
-  }
-  function renderMultitask(box) {
-    box.innerHTML = '';
-    const grid = el('div', { id: 'mt-wrap', style: 'grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr' });
-    grid.append(cell(activeModel(), 0), cell(MODELS.list[1]?.id || activeModel(), 1), cell(MODELS.list[2]?.id || activeModel(), 2), cell(MODELS.list[3]?.id || activeModel(), 3));
-    box.appendChild(el('div', { class: 'tiny muted center', text: t('mt.title') }));
-    box.appendChild(grid);
-  }
-  function renderCompare(box) {
-    box.innerHTML = '';
-    const m1 = MODELS.list[0]?.id || activeModel();
-    const m2 = MODELS.list[1]?.id || m1;
-    const wrap = el('div', { id: 'mt-wrap', style: 'grid-template-columns:1fr 1fr;grid-template-rows:1fr' });
-    wrap.append(cell(m1, 0), cell(m2, 1));
-    box.appendChild(el('div', { class: 'tiny muted center', text: t('cmp.title') }));
-    box.appendChild(wrap);
-  }
-
-  // ---------------------------------------------------------------- exports
   const Chat = {
-    CTX, MODELS, buildComposer, renderMessages, renderChips, setTab, send, toggleVoice, toggleLive,
-    stopVoice, loadModels, paidWarning, activeModel, modelInfo, contextBlock, PRESET_SKILLS,
-    resumeFromHistory(h) { S.activeId = h.conv || null; setTab('classic'); if (!S.conv.find((c) => c.id === h.conv)) { const c = { id: h.conv || 'c' + Date.now(), title: h.q.slice(0, 40), messages: [{ role: 'user', content: h.q }, { role: 'assistant', content: h.a }], at: Date.now() }; S.conv.unshift(c); S.activeId = c.id; save('conv'); window.App.renderConvList(); } renderMessages(); },
-    newConv() { const c = { id: 'c' + Date.now(), title: t('nav.new'), mode: S.mode, messages: [], at: Date.now() }; if (!S.private) { S.conv.unshift(c); S.activeId = c.id; save('conv'); } else { S.privateConv = c; S.activeId = c.id; } renderMessages(); window.App.renderConvList(); },
-    openConv(id) { S.activeId = id; renderMessages(); },
-    hud,
+    CTX, MODELS, EFFORTS, buildComposer, renderMessages, renderChips, setTab, send, toggleVoice, toggleLive,
+    stopVoice, loadModels, paidWarning, activeModel, modelInfo, contextBlock, PRESET_SKILLS, paintModelButton, hud,
+    resumeFromHistory(h) {
+      S.activeId = h.conv || null; setTab('classic');
+      if (!S.conv.find((c) => c.id === h.conv)) {
+        const c = { id: h.conv || 'c' + Date.now(), title: h.q.slice(0, 40), messages: [{ role: 'user', content: h.q }, { role: 'assistant', content: h.a }], at: Date.now() };
+        S.conv.unshift(c); S.activeId = c.id; save('conv'); window.App.renderConvList();
+      }
+      renderMessages();
+    },
+    newConv() {
+      const c = { id: 'c' + Date.now(), title: t('nav.new'), mode: S.mode, messages: [], at: Date.now() };
+      if (!S.private) { S.conv.unshift(c); S.activeId = c.id; save('conv'); }
+      else { S.privateConv = c; S.activeId = c.id; }
+      setTab('classic'); renderWelcome(); window.App.renderConvList();
+    },
+    openConv(id) { S.activeId = id; setTab('classic'); },
   };
   window.Chat = Chat;
 })();

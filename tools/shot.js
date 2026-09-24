@@ -1,10 +1,9 @@
-const chromium = require('@sparticuz/chromium').default || require('@sparticuz/chromium');
-const puppeteer = require('puppeteer-core');
+const { launch } = require('./browser');
 (async () => {
   const args = [...chromium.args, '--no-sandbox', '--disable-dev-shm-usage', '--font-render-hinting=none'];
   const path = await chromium.executablePath();
   console.log('binaire:', path);
-  const browser = await puppeteer.launch({ args, executablePath: path, headless: true, defaultViewport: { width: Number(process.env.W||1280), height: Number(process.env.H||800) } });
+  const browser = await launch({ defaultViewport: { width: Number(process.env.W||1280), height: Number(process.env.H||800) } });
   const page = await browser.newPage();
   page.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE-ERR:', m.text().slice(0,200)); });
   page.on('pageerror', (e) => console.log('PAGE-ERR:', e.message.slice(0, 300)));

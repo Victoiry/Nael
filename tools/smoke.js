@@ -77,10 +77,11 @@ const server = http.createServer((req, res) => {
     await new Promise((r) => setTimeout(r, 500));
     console.log('workspace visible:', !w.document.getElementById('workspace').classList.contains('hidden'));
     console.log('composer construit:', !!w.document.getElementById('send-btn'), !!w.document.getElementById('input'));
-    console.log('boutons bas:', [...w.document.querySelectorAll('.quickbar .btn')].length);
+    console.log('barre du haut:', w.document.querySelectorAll('#chat-header button').length, '· composeur:', w.document.querySelectorAll('#composer .ibtn').length);
+    console.log('emoji dans l\'interface:', /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(w.document.getElementById('workspace').textContent || ''));
     console.log('langue (4):', w.document.querySelectorAll('#lang-select option').length);
     // panneaux
-    for (const p of ['personalize', 'global', 'ai', 'history', 'memory', 'console', 'bridge']) {
+    for (const p of ['personalize', 'global', 'ai', 'modes', 'history', 'memory', 'console', 'bridge']) {
       w.App.showPanel(p);
       await new Promise((r) => setTimeout(r, 60));
       const body = w.document.getElementById('panel-body');
@@ -134,10 +135,10 @@ const server = http.createServer((req, res) => {
     // studios
     w.Media.open('image');
     await new Promise((r) => setTimeout(r, 100));
-    console.log('studio image champs:', w.document.querySelectorAll('#studio input, #studio select, #studio textarea').length);
+    console.log('studio image champs:', w.document.querySelectorAll('#chat-scroll input, #chat-scroll select, #chat-scroll textarea').length);
     w.Media.open('video');
     await new Promise((r) => setTimeout(r, 100));
-    console.log('studio vidéo sliders:', w.document.querySelectorAll('#studio input[type=range]').length);
+    console.log('studio vidéo sliders:', w.document.querySelectorAll('#chat-scroll input[type=range]').length);
     // i18n : 4 langues
     for (const l of ['fr', 'en', 'es', 'it']) {
       w.J.setLang(l);

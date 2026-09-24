@@ -11,12 +11,22 @@
     "doctor": "node tools/doctor.js",
     "smoke": "node tools/smoke.js",
     "verify": "node tools/i18n-check.js && node tools/doctor.js",
-    "verify:ui": "node tools/verify-i18n-ui.js"
+    "verify:ui": "node tools/verify-i18n-ui.js",
+    "i18n-check": "node tools/i18n-check.js",
+    "verify:layout": "node tools/verify-layout.js",
+    "verify:app": "node tools/verify-app.js",
+    "verify:stale": "node tools/verify-stale.js",
+    "repro": "node tools/repro.js"
   },
   "engines": {
     "node": ">=18"
   },
   "author": "Nael Hamouche <nael.hamouche@gmail.com>",
   "license": "MIT",
-  "dependencies": {}
+  "dependencies": {},
+  "devDependencies": {
+    "@sparticuz/chromium": "^153.0.0",
+    "jsdom": "^30.1.1",
+    "puppeteer-core": "^25.12.0"
+  }
 }

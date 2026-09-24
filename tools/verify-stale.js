@@ -1,6 +1,5 @@
 // Simule un navigateur avec un i18n.js ANCIEN en cache : la page doit rester lisible (jamais de cle brute)
-const chromium = require('@sparticuz/chromium').default || require('@sparticuz/chromium');
-const puppeteer = require('puppeteer-core');
+const { launch } = require('./browser');
 const fs = require('fs');
 const path = require('path');
 
@@ -8,8 +7,7 @@ const path = require('path');
   const fresh = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'i18n.js'), 'utf8');
   // version ancienne : on supprime toutes les cles lp.* (comme avant la mise a jour)
   const stale = fresh.replace(/^\s*"lp\.[^"]+":.*$/gm, '');
-  const browser = await puppeteer.launch({ args: [...chromium.args, '--no-sandbox', '--disable-gpu', '--single-process', '--no-zygote', '--disable-dev-shm-usage'],
-    executablePath: await chromium.executablePath(), headless: true, defaultViewport: { width: 910, height: 730 } });
+  const browser = await launch({ defaultViewport: { width: 910, height: 730 } });
   const page = await browser.newPage();
   await page.setRequestInterception(true);
   page.on('request', (r) => {
