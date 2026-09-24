@@ -19,16 +19,20 @@
   function boot() {
     applyTheme(); applyI18n(document);
     if (S.settings.ai.privateDefault) S.private = true;
-    const sel = document.getElementById('lang-select');
-    window.LANGS.forEach((l) => sel.appendChild(el('option', { value: l.code, text: l.flag + ' ' + l.code.toUpperCase(), title: l.label, selected: l.code === S.settings.lang })));
-    sel.title = window.LANGS.map((l) => l.label).join(' / ');
-    sel.addEventListener('change', () => { setLang(sel.value); buildModeSwitch(); window.Chat.buildComposer(); window.Settings.render(window.Settings.current); });
+    const sels = ['lang-select', 'lang-select-landing'].map((id) => document.getElementById(id)).filter(Boolean);
+    sels.forEach((sel) => {
+      window.LANGS.forEach((l) => sel.appendChild(el('option', { value: l.code, text: l.flag + ' ' + l.code.toUpperCase(), title: l.label, selected: l.code === S.settings.lang })));
+      sel.title = window.LANGS.map((l) => l.label).join(' / ');
+      sel.addEventListener('change', () => {
+        setLang(sel.value);
+        sels.forEach((o) => { if (o !== sel) o.value = sel.value; });
+        buildModeSwitch(); window.Chat.buildComposer(); window.Settings.render(window.Settings.current);
+      });
+    });
 
-    document.getElementById('credit')?.classList.remove('hidden');
-    const ctaBar = document.getElementById('cta-bar');
-    if (ctaBar) ctaBar.style.display = 'flex';
-    document.getElementById('btn-start').addEventListener('click', () => start(false));
-    document.getElementById('btn-login').addEventListener('click', () => openAuth());
+
+    document.querySelectorAll('[data-action="start"]').forEach((b) => b.addEventListener('click', () => start(false)));
+    document.querySelectorAll('[data-action="login"]').forEach((b) => b.addEventListener('click', () => openAuth()));
     document.getElementById('btn-auth-top').addEventListener('click', () => (S.auth ? logout() : openAuth()));
     document.getElementById('btn-new').addEventListener('click', () => window.Chat.newConv());
     document.getElementById('conv-search').addEventListener('input', renderConvList);
@@ -287,9 +291,8 @@
   // =========================================================== app
   function enterApp() {
     document.getElementById('landing').classList.add('hidden');
-    const bar = document.getElementById('cta-bar');
-    if (bar) bar.style.display = 'none';
-    document.getElementById('credit')?.classList.add('hidden');
+    document.body.classList.add('app-mode');    // l'app tient dans l'ecran, plus de defilement
+    window.scrollTo(0, 0);
     document.getElementById('workspace').classList.remove('hidden');
     buildModeSwitch();
     window.Chat.loadModels().then(() => { window.Chat.buildComposer(); window.Chat.setTab(S.tab || 'classic'); });
@@ -425,6 +428,11 @@
     const m = modal({ title: t('auth.title'), sub: t('auth.subtitle'), body, foot: [guest, go], vert: true });
   }
   function logout() { S.auth = null; save('auth'); paintUser(); toast(t('auth.logout')); }
+  function showLanding() {
+    document.getElementById('workspace').classList.add('hidden');
+    document.getElementById('landing').classList.remove('hidden');
+    document.body.classList.remove('app-mode');
+  }
 
   // ---------- bridge
   async function pollBridge() {
@@ -472,5 +480,5 @@
 
   A.stopLive = () => { const b = document.getElementById('live-btn'); if (b && b.classList.contains('rec')) window.Chat.toggleLive(); };
   window.addEventListener('DOMContentLoaded', boot);
-  window.App = { start, startOnboarding, openModelTest, openBatchStep, enterApp, showPanel, showApproval, renderConvList, openAuth, paidConsent, downloadBat };
+  window.App = { start, startOnboarding, openModelTest, openBatchStep, enterApp, showLanding, showPanel, showApproval, renderConvList, openAuth, paidConsent, downloadBat };
 })();

@@ -15,28 +15,85 @@
 <div id="bg"><div class="layer"></div><canvas></canvas><div class="grid"></div></div>
 <div id="errbar"><span id="errbar-msg"></span><span class="spacer"></span><button class="btn sm" onclick="this.parentNode.classList.remove('on')">✕</button></div>
 
-<!-- ================= LANDING ================= -->
+<!-- ================= ACCUEIL (page qui defile) ================= -->
 <div id="landing">
-  <div class="orb"></div>
-  <div class="brand" data-i18n="land.brand">JARVIS</div>
-  <h1 data-i18n="land.hero">Ayez l'IA que tout le monde souhaiterait avoir : JARVIS</h1>
-  <p class="sub" data-i18n="land.sub">Votre agent personnel : il parle, écoute, voit, code, crée des images et agit sur votre ordinateur.</p>
-  <div class="feats">
-    <span class="chip">🎙 <span data-i18n="land.feat1">Voix temps réel</span></span>
-    <span class="chip">💻 <span data-i18n="land.feat2">Agent sur votre PC</span></span>
-    <span class="chip">🎨 <span data-i18n="land.feat3">100 % personnalisable</span></span>
-    <span class="chip">🌍 <span data-i18n="land.feat4">4 langues</span></span>
-  </div>
-  <p class="tiny muted" id="land-note" data-i18n="land.noaccount">Sans compte, en 30 secondes</p>
-  <p class="tiny muted" data-i18n="land.legal">En continuant, vous acceptez d'utiliser l'IA de façon responsable.</p>
-</div>
 
-<!-- barre d'action toujours visible -->
-<div id="cta-bar">
-  <div class="cta" id="cta-inline">
-    <button class="btn primary" id="btn-start" data-i18n="land.start">Commencer</button>
-    <button class="btn" id="btn-login" data-i18n="land.login">J'ai déjà un compte</button>
-  </div>
+  <header id="lp-nav">
+    <div class="lp-brand">⚡ <b>JARVIS</b></div>
+    <nav class="lp-links">
+      <a href="#lp-free" data-i18n="lp.nav.free">Gratuit</a>
+      <a href="#lp-do" data-i18n="lp.nav.do">Fonctions</a>
+      <a href="#lp-how" data-i18n="lp.nav.how">Comment ça marche</a>
+    </nav>
+    <span class="spacer"></span>
+    <select id="lang-select-landing" class="select-inline" title="Langue / Language"></select>
+    <button class="btn primary lp-nav-cta" data-action="start" data-i18n="lp.cta">Lancer JARVIS</button>
+  </header>
+
+  <section id="lp-hero">
+    <div class="orb"></div>
+    <div class="brand" data-i18n="land.brand">JARVIS</div>
+    <h1 data-i18n="land.hero">Ayez l'IA que tout le monde souhaiterait avoir : JARVIS</h1>
+    <p class="sub" data-i18n="land.sub">Votre agent personnel : il parle, écoute, voit, code, crée des images et agit sur votre ordinateur.</p>
+
+    <button class="btn-hero" data-action="start">
+      <span class="ico">🚀</span>
+      <span class="txt"><b data-i18n="lp.cta">Lancer JARVIS</b><small data-i18n="lp.cta.sub">100 % gratuit avec les modèles gratuits</small></span>
+    </button>
+
+    <div class="hero-row">
+      <button class="btn" data-action="login" data-i18n="land.login">J'ai déjà un compte</button>
+      <span class="chip">🎁 <span data-i18n="lp.noaccount2">Aucune carte bancaire</span></span>
+    </div>
+    <p class="tiny muted" data-i18n="land.noaccount">Sans compte, en 30 secondes</p>
+    <a class="scroll-hint" href="#lp-free">⌄ <span data-i18n="lp.scroll">Faites défiler : tout est expliqué plus bas</span> ⌄</a>
+  </section>
+
+  <section id="lp-free" class="lp-sec">
+    <span class="pill" data-i18n="lp.free.pill">🎁 100 % GRATUIT</span>
+    <h2 data-i18n="lp.free.title">Oui, JARVIS est 100 % gratuit</h2>
+    <p class="lead" data-i18n="lp.free.lead">JARVIS utilise votre propre clé OpenRouter. En choisissant un modèle gratuit, vous ne payez absolument rien : pas d'abonnement, pas de carte bancaire, pas de limite de durée.</p>
+    <div class="cards">
+      <div class="card"><span class="ci">🆓</span><b data-i18n="lp.free.c1t">Modèles gratuits</b><span data-i18n="lp.free.c1d">Les modèles dont l'identifiant contient :free ou /free sont à 0 € — ils sont proposés en premier dans la liste.</span></div>
+      <div class="card"><span class="ci">🙅</span><b data-i18n="lp.free.c2t">Sans inscription</b><span data-i18n="lp.free.c2d">Commencez en 30 secondes : le compte est facultatif, tout fonctionne sans.</span></div>
+      <div class="card"><span class="ci">💳</span><b data-i18n="lp.free.c3t">Sans carte bancaire</b><span data-i18n="lp.free.c3d">Aucun moyen de paiement n'est demandé pour utiliser les modèles gratuits.</span></div>
+      <div class="card"><span class="ci">🔒</span><b data-i18n="lp.free.c4t">Vos données chez vous</b><span data-i18n="lp.free.c4d">Réglages, historique et mémoire restent dans votre navigateur. Le pont local s'exécute sur votre machine.</span></div>
+    </div>
+    <div class="notice warn">⚠️ <span data-i18n="lp.free.warn">Certains modèles sont payants : ils sont signalés en gras et en rouge, et JARVIS vous demande de confirmer (5 secondes) avant de les tester. Si vous restez sur les modèles gratuits, vous ne dépensez rien.</span></div>
+  </section>
+
+  <section id="lp-do" class="lp-sec">
+    <h2 data-i18n="lp.do.title">Tout ce que vous pouvez faire</h2>
+    <p class="lead" data-i18n="lp.do.lead">Un seul outil : discuter, parler, voir, créer, coder et agir sur votre ordinateur.</p>
+    <div class="cards">
+      <div class="card"><span class="ci">💬</span><b data-i18n="lp.do.d1t">Discuter</b><span data-i18n="lp.do.d1d">Réponses en direct, historique, mémoire de vos préférences.</span></div>
+      <div class="card"><span class="ci">🎙️</span><b data-i18n="lp.do.d2t">Parler et écouter</b><span data-i18n="lp.do.d2d">Dictée vocale, réponses à voix haute, conversation en boucle.</span></div>
+      <div class="card"><span class="ci">📹</span><b data-i18n="lp.do.d3t">Mode Live</b><span data-i18n="lp.do.d3d">Caméra + micro : l'IA voit ce que vous voyez et vous répond.</span></div>
+      <div class="card"><span class="ci">🤖</span><b data-i18n="lp.do.d4t">Agir sur votre PC</b><span data-i18n="lp.do.d4d">Commandes, fichiers, captures d'écran, web — jamais sans votre accord.</span></div>
+      <div class="card"><span class="ci">🖼️</span><b data-i18n="lp.do.d5t">Créer des images</b><span data-i18n="lp.do.d5d">Qualité, résolution, pixels (max 3K), palette, mode pro et retouche interactive.</span></div>
+      <div class="card"><span class="ci">🎬</span><b data-i18n="lp.do.d6t">Créer des vidéos</b><span data-i18n="lp.do.d6d">Durée, images/seconde, mouvement : animation exportable en webm.</span></div>
+      <div class="card"><span class="ci">📚</span><b data-i18n="lp.do.d7t">RAG & Skills</b><span data-i18n="lp.do.d7d">5 fichiers, 5 pages web, 5 notes, et des skills prêts ou créés par vous.</span></div>
+      <div class="card"><span class="ci">🎨</span><b data-i18n="lp.do.d8t">Tout personnaliser</b><span data-i18n="lp.do.d8d">Nom de l'IA, personnalité, ton, voix, thèmes, fonds d'écran, polices.</span></div>
+      <div class="card"><span class="ci">🧩</span><b data-i18n="lp.do.d9t">Multitâche & comparaison</b><span data-i18n="lp.do.d9d">Jusqu'à 4 chats en parallèle, ou 2 modèles sur la même question.</span></div>
+      <div class="card"><span class="ci">🕵️</span><b data-i18n="lp.do.d10t">Privé & hors connexion</b><span data-i18n="lp.do.d10d">Mode sans aucune trace, ou modèles locaux (Ollama, LM Studio).</span></div>
+    </div>
+  </section>
+
+  <section id="lp-how" class="lp-sec">
+    <h2 data-i18n="lp.how.title">Comment ça marche</h2>
+    <div class="steps">
+      <div class="step"><span class="n">1</span><div><b data-i18n="lp.how.s1t">Créez votre clé OpenRouter</b><small data-i18n="lp.how.s1d">3 étapes illustrées, avec le lien direct vers la page des clés.</small></div></div>
+      <div class="step"><span class="n">2</span><div><b data-i18n="lp.how.s2t">Testez avant d'enregistrer</b><small data-i18n="lp.how.s2d">La clé n'est gardée qu'après un test réussi. Rien n'est enregistré si ça échoue.</small></div></div>
+      <div class="step"><span class="n">3</span><div><b data-i18n="lp.how.s3t">Lancez le fichier .bat</b><small data-i18n="lp.how.s3d">Il installe Claude Code CLI, le relie à OpenRouter et à ce site, puis vérifie avec un numéro.</small></div></div>
+      <div class="step"><span class="n">4</span><div><b data-i18n="lp.how.s4t">Utilisez JARVIS</b><small data-i18n="lp.how.s4d">Chat, voix, images, vidéos et agent sur votre PC.</small></div></div>
+    </div>
+    <button class="btn-hero small" data-action="start"><span class="ico">🚀</span><span class="txt"><b data-i18n="lp.cta">Lancer JARVIS</b></span></button>
+  </section>
+
+  <footer id="lp-footer">
+    <div class="lp-credit"><span data-i18n="nav.creator">Créateur : Nael Hamouche</span> — <a href="mailto:nael.hamouche@gmail.com">nael.hamouche@gmail.com</a></div>
+    <div class="tiny muted"><span class="ver">v1.2</span> · <span data-i18n="lp.rights">Tous droits réservés</span></div>
+  </footer>
 </div>
 
 <!-- ================= WORKSPACE ================= -->
@@ -122,9 +179,6 @@
 
 <div id="toasts"></div>
 
-<footer class="credit" id="credit">
-  <span class="ver">v1.1</span> · <span data-i18n="nav.creator">Créateur : Nael Hamouche</span> — <a href="mailto:nael.hamouche@gmail.com">nael.hamouche@gmail.com</a>
-</footer>
 
 <noscript><div style="position:fixed;inset:auto 0 0 0;background:#2a0d16;color:#ffd7de;padding:.8rem;text-align:center;z-index:99">
 Activez JavaScript pour utiliser JARVIS.</div></noscript>
