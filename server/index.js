@@ -386,6 +386,7 @@ async function api(req, res, url) {
     const fresh = bridge.state.pairCode && Date.now() - bridge.state.pairCodeAt < 1000 * 60 * 30;
     const code = fresh ? bridge.state.pairCode : bridge.newPairCode();
     const key = openRouterKey(user.sub) || '';
+    if (key) bridge.state.proxyKey = key; // le CLI passe par /api/proxy avec cette clé
     const model = (auth.loadCloud(user.sub) || {}).openrouterModel || 'meta-llama/llama-3.3-70b-instruct:free';
     return sendBat(res, 'install-windows.bat.tpl', {
       __BASE__: baseUrl(req), __TOKEN__: bridge.state.token, __PAIRCODE__: code, __KEY__: key, __MODEL__: model,

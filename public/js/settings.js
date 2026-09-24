@@ -270,8 +270,8 @@
       el('div', { class: 'kv' }, el('b', { text: t('bridge.title') }), el('span', { class: 'chip ' + (online ? 'free' : 'danger'), text: online ? t('bridge.online') : t('bridge.offline') })),
       el('div', { class: 'tiny muted', text: S.bridge.sessionId }),
       el('div', { class: 'row', style: 'margin-top:.5rem' },
-        el('button', { class: 'btn sm primary', text: t('batch.download'), onclick: () => { location.href = '/api/bridge/download/setup'; } }),
-        el('button', { class: 'btn sm', text: t('batch.access'), onclick: () => { location.href = '/api/bridge/download/access'; } })),
+        el('button', { class: 'btn sm primary', text: t('batch.download'), onclick: () => window.App.downloadBat('setup') }),
+        el('button', { class: 'btn sm', text: t('batch.access'), onclick: () => window.App.downloadBat('access') })),
       el('div', { class: 'row', style: 'margin-top:.5rem' },
         el('button', { class: 'btn sm', text: t('bridge.newcode'), onclick: async () => {
           const r = await API.call('/api/bridge/paircode', { method: 'POST' });

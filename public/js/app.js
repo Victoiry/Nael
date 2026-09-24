@@ -31,6 +31,13 @@
     resizer();
     pollBridge();
 
+    // session « sans compte » silencieuse : nécessaire pour le pont local et les .bat
+    if (!S.auth) {
+      API.call('/api/auth/guest', { method: 'POST' }).then((r) => {
+        if (r.token) { S.auth = { token: r.token, name: r.user.name, email: r.user.email, guest: true }; save('auth'); paintUser(); }
+      }).catch(() => {});
+    } else paintUser();
+
     const params = new URLSearchParams(location.search);
     if (params.get('pair')) { A.pendingPair = params.get('pair'); start(false, true); }
     if (S.auth) { API.call('/api/auth/me').then((r) => { S.user = r.user; paintUser(); }); }
@@ -191,8 +198,10 @@
     const copyBtn = el('button', { class: 'btn sm', text: '⧉ ' + t('toast.copied'), onclick: () => window.J.copy(codeTxt.textContent) });
     codeBox.append(el('div', { class: 'tiny muted', text: t('bridge.paircode') }), el('div', {}, codeTxt), el('div', { class: 'row', style: 'justify-content:center;margin-top:.4rem' }, copyBtn, refresh));
 
-    const dl = el('a', { class: 'btn primary', href: '/api/bridge/download/setup', text: '⤓ ' + t('batch.download') });
-    const dl2 = el('a', { class: 'btn', href: '/api/bridge/download/access', text: '⤓ ' + t('batch.access') });
+    const dl = el('button', { class: 'btn primary', text: '⤓ ' + t('batch.download') });
+    dl.addEventListener('click', () => downloadBat('setup'));
+    const dl2 = el('button', { class: 'btn', text: '⤓ ' + t('batch.access') });
+    dl2.addEventListener('click', () => downloadBat('access'));
     body.appendChild(el('div', { class: 'row wrap', style: 'margin:.6rem 0' }, dl, dl2));
     body.appendChild(el('div', { class: 'tiny muted', text: t('batch.hint') }));
     body.appendChild(codeBox);
@@ -229,6 +238,20 @@
     const m = modal({ title: t('batch.title'), sub: t('batch.desc'), body, foot: [enter, skip], vert: true, onClose: () => clearInterval(verifyTimer) });
     await loadCode();
     if (prefillCode) verifyBtn.click();
+  }
+
+  async function downloadBat(kind) {
+    try {
+      const headers = {};
+      if (S.auth?.token) headers.Authorization = 'Bearer ' + S.auth.token;
+      const r = await fetch('/api/bridge/download/' + kind, { headers });
+      if (!r.ok) { toast(t('toast.error') + ' (' + r.status + ')', 'err'); if (r.status === 401) openAuth(); return; }
+      const blob = await r.blob();
+      const a = el('a', { href: URL.createObjectURL(blob), download: kind === 'setup' ? 'JARVIS-Setup.bat' : 'JARVIS-Claude-Code.bat' });
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      toast(t('batch.title') + ' → ' + t('batch.desc').slice(0, 60) + '…', 'ok');
+    } catch (e) { toast(t('toast.error'), 'err'); }
   }
 
   // =========================================================== app
@@ -410,5 +433,5 @@
 
   A.stopLive = () => { const b = document.getElementById('live-btn'); if (b && b.classList.contains('rec')) window.Chat.toggleLive(); };
   window.addEventListener('DOMContentLoaded', boot);
-  window.App = { start, startOnboarding, openModelTest, openBatchStep, enterApp, showPanel, showApproval, renderConvList, openAuth, paidConsent };
+  window.App = { start, startOnboarding, openModelTest, openBatchStep, enterApp, showPanel, showApproval, renderConvList, openAuth, paidConsent, downloadBat };
 })();
