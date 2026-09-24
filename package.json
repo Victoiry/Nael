@@ -1,0 +1,16 @@
+{
+  "name": "jarvis",
+  "version": "1.0.0",
+  "private": true,
+  "description": "JARVIS — assistant IA personnel : voix, vision, images, vidéos, agent sur votre PC. FR / EN / ES / IT.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js",
+    "check": "node --check server/index.js && node --check bridge/runner.js"
+  },
+  "engines": { "node": ">=18" },
+  "author": "Nael Hamouche <nael.hamouche@gmail.com>",
+  "license": "MIT",
+  "dependencies": {}
+}

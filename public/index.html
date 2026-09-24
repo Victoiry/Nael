@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JARVIS — l'IA que tout le monde souhaiterait avoir</title>
+<meta name="description" content="JARVIS : agent IA vocal, vision, génération d'images et de vidéos, actions sur votre PC. FR / EN / ES / IT.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='44' fill='%2322d3ee'/><circle cx='50' cy='50' r='24' fill='%230b1220'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+
+<div id="bg"><div class="layer"></div><canvas></canvas><div class="grid"></div></div>
+
+<!-- ================= LANDING ================= -->
+<div id="landing">
+  <div class="orb"></div>
+  <div class="brand" data-i18n="land.brand">JARVIS</div>
+  <h1 data-i18n="land.hero">Ayez l'IA que tout le monde souhaiterait avoir : JARVIS</h1>
+  <p class="sub" data-i18n="land.sub"></p>
+  <div class="feats">
+    <span class="chip">🎙 <span data-i18n="land.feat1"></span></span>
+    <span class="chip">💻 <span data-i18n="land.feat2"></span></span>
+    <span class="chip">🎨 <span data-i18n="land.feat3"></span></span>
+    <span class="chip">🌍 <span data-i18n="land.feat4"></span></span>
+  </div>
+  <div class="cta">
+    <button class="btn primary" id="btn-start" data-i18n="land.start"></button>
+    <button class="btn" id="btn-login" data-i18n="land.login"></button>
+  </div>
+  <p class="tiny muted" id="land-note" data-i18n="land.noaccount"></p>
+  <p class="tiny muted" data-i18n="land.legal"></p>
+</div>
+
+<!-- ================= WORKSPACE ================= -->
+<div id="workspace" class="hidden">
+  <header id="topbar">
+    <button class="icon-btn" id="side-toggle" title="Menu">
+      <svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+    </button>
+    <span class="brand">JARVIS</span>
+    <nav class="main-tabs" id="main-tabs">
+      <button class="tab" data-panel="personalize" data-i18n="nav.personalize"></button>
+      <button class="tab" data-panel="global" data-i18n="nav.global"></button>
+      <button class="tab" data-panel="ai" data-i18n="nav.ai"></button>
+      <button class="tab" data-panel="history" data-i18n="nav.history"></button>
+      <button class="tab" data-panel="memory" data-i18n="nav.memory"></button>
+      <button class="tab" data-panel="console" data-i18n="nav.console"></button>
+      <button class="tab" data-panel="bridge" data-i18n="nav.bridge"></button>
+    </nav>
+    <select id="lang-select" class="select-inline" title="Langue / Language"></select>
+    <span class="chip" id="bridge-chip">●</span>
+    <button class="icon-btn" id="panel-toggle" title="Menu">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>
+    </button>
+  </header>
+
+  <div class="main" id="main-grid">
+    <aside id="sidebar"><div class="inner">
+      <button class="btn primary block" id="btn-new" data-i18n="nav.new"></button>
+      <input type="text" id="conv-search" data-i18n-ph="nav.search">
+      <div id="conv-list"></div>
+      <div id="cbridge" class="panel-sec tiny">
+        <h4 data-i18n="bridge.title"></h4>
+        <div id="bridge-mini" class="muted">…</div>
+      </div>
+      <div class="row" style="padding-top:.4rem;border-top:1px solid var(--border)">
+        <div class="col" style="gap:0">
+          <b id="me-name" class="tiny">Invité</b>
+          <span id="me-mail" class="tiny muted"></span>
+        </div>
+        <span class="spacer"></span>
+        <button class="btn sm" id="btn-auth-top" data-i18n="auth.login"></button>
+      </div>
+    </div></aside>
+
+    <section id="main-col">
+      <!-- chat view -->
+      <div id="view-chat" class="col" style="flex:1;min-height:0">
+        <div class="row wrap" id="chat-tabs" style="padding:.5rem .9rem 0;gap:.3rem">
+          <button class="tab active" data-tab="classic" data-i18n="tab.classic"></button>
+          <button class="tab" data-tab="multitask" data-i18n="tab.multitask"></button>
+          <button class="tab" data-tab="compare" data-i18n="tab.compare"></button>
+          <button class="tab" data-tab="code" data-i18n="tab.code"></button>
+          <button class="tab priv" data-tab="private" data-i18n="tab.private"></button>
+          <button class="tab" data-tab="offline" data-i18n="tab.offline"></button>
+          <span class="spacer"></span>
+          <span class="chip" id="mode-chip"></span>
+        </div>
+        <div id="chat-scroll"></div>
+        <div id="composer"></div>
+      </div>
+      <!-- image / video studio -->
+      <div id="studio" class="hidden"></div>
+    </section>
+
+    <div class="resizer" id="resizer" data-i18n-title="panel.resize"></div>
+    <aside id="panel"><div class="inner" id="panel-body"></div></aside>
+  </div>
+</div>
+
+<!-- ================= VOICE / LIVE HUD ================= -->
+<div id="voice-hud">
+  <video id="live-video" class="hidden" autoplay playsinline muted></video>
+  <div class="wave" id="wave"></div>
+  <div class="hud-text" id="hud-text"></div>
+  <div class="row">
+    <button class="btn" id="hud-stop" data-i18n="msg.stop"></button>
+    <button class="btn primary" id="hud-send" data-i18n="msg.send"></button>
+  </div>
+  <div id="hud-extra" style="max-width:80vw"></div>
+</div>
+
+<div id="toasts"></div>
+
+<footer class="credit">
+  <span data-i18n="nav.creator"></span> — <a href="mailto:nael.hamouche@gmail.com">nael.hamouche@gmail.com</a>
+</footer>
+
+<script src="/js/i18n.js"></script>
+<script src="/js/core.js"></script>
+<script src="/js/settings.js"></script>
+<script src="/js/chat.js"></script>
+<script src="/js/media.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>
