@@ -7,12 +7,21 @@ L'onglet de l'aperçu reste en mémoire : un simple F5 peut réafficher l'ancien
 La nouvelle version **se recharge toute seule** (`?v=…`) et affiche un bouton **⟳ Recharger** si besoin.
 Si jamais : **fermez l'onglet** puis rouvrez le lien, ou **Ctrl+Shift+R**. Le badge en bas doit indiquer **v2.0**.
 
+## 🆕 Nouveautés de la v2.0 (interface refaite façon ChatGPT)
+
+- **Aucun emoji** : uniquement des icônes vectorielles (nettes et rapides).
+- **Espace maximisé** : barre latérale des conversations à gauche, chat centré, barre de saisie compacte.
+- **Tous les réglages avancés** sont dans **une seule icône engrenage** (en haut à droite) : Personnaliser · Paramètres globaux · Paramètres de l'IA · Modes et contexte · Historique · Mémoire · Console · Pont local.
+- **Modes et contexte** (Multitâche, Comparaison, Code, Privé, Hors connexion, Image, Vidéo, RAG, fichiers, skills) : bouton **+** dans la barre de saisie.
+- Modèle **gratuit sélectionné par défaut** : badge `FREE` visible en haut, `PAID` en rouge pour les payants.
+- L'écran ne peut plus rester vide : si un fichier manque, un bandeau **⟳ Recharger** apparaît au lieu d'une page blanche.
+
 ## Étape 1 — Ouvrez le lien
-Vous devez voir** obligatoirement** en bas de la page le badge vert **v1.1**.
+Vous devez voir** obligatoirement** en bas de la page le badge vert **v2.0**.
 
 | Ce que vous voyez | Ce que ça veut dire |
 |---|---|
-| Badge **v1.1** en bas | ✅ vous avez la bonne version → passez à l'étape 2 |
+| Badge **v2.0** en bas | ✅ vous avez la bonne version → passez à l'étape 2 |
 | Pas de badge, ou pas de bouton **Commencer** | ❌ votre navigateur garde l'ancienne page → **Ctrl+Shift+R** (forcé), ou **Cmd+Shift+R** sur Mac |
 | Le texte se chevauche encore | ❌ cache : videz-le (**Ctrl+Shift+Suppr** → Images et fichiers en cache) puis rechargez |
 
