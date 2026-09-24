@@ -31,7 +31,7 @@
     const box = view();
     box.classList.remove('grid-mode');
     box.innerHTML = '';
-    const studio = el('div', { class: 'studio-grid' });
+    const studio = el('div', { class: 'studio-grid', id: 'studio' });
     const left = el('div', { class: 'col', id: 'st-left' });
     const right = el('div', {}, el('div', { class: 'canvas-box', id: 'st-canvas' }), el('div', { id: 'st-under', class: 'col', style: 'margin-top:.6rem' }));
     studio.append(left, right);
@@ -149,7 +149,10 @@
     brushOn.addEventListener('click', () => { ST.brush.on = !ST.brush.on; brushOn.classList.toggle('primary', ST.brush.on); });
     const textBtn = btn(t('img.addtext'), addText);
     box.append(brushSize, el('div', { class: 'row wrap' }, brushOn, textBtn,
-      btn(t('img.undo'), () => { if (ST.stack?.length) { ctx2d(ST.paint)?.putImageData(ST.stack.pop(), 0, 0); redraw(); } }),
+      btn(t('img.undo'), () => {
+        if (ST.stack?.length) { ctx2d(ST.paint)?.putImageData(ST.stack.pop(), 0, 0); redraw(); toast(t('img.undone'), 'ok'); }
+        else toast(t('img.nothingUndo'), 'err');
+      }),
       btn(t('img.clearLayer'), () => { ctx2d(ST.paint)?.clearRect(0, 0, ST.paint.width, ST.paint.height); ST.stack = []; redraw(); })));
     left.appendChild(box);
   }
@@ -479,24 +482,22 @@
   // ============================================================ export
   function exportImage(mime) {
     ensure();
-    if (ST.noCanvas || !ok2d(ST.out)) return toast(t('img.saved'), 'err');
+    if (ST.noCanvas || !ok2d(ST.out)) return toast(t('img.empty'), 'err');
     try {
       const q = mime === 'image/png' ? undefined : Math.min(0.95, QUAL[ST.quality][1] / 6 + 0.6);
       ST.out.toBlob((blob) => {
-        const a = el('a', { href: URL.createObjectURL(blob), download: 'jarvis-' + Date.now() + (mime === 'image/png' ? '.png' : mime === 'image/webp' ? '.webp' : '.jpg') });
-        a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-        toast(t('img.saved'), 'ok');
+        if (!blob) return toast(t('img.empty'), 'err');
+        window.J.download(blob, 'jarvis-' + Date.now() + (mime === 'image/png' ? '.png' : mime === 'image/webp' ? '.webp' : '.jpg'), t('img.saved'));
       }, mime, q);
     } catch (e) { toast(String(e.message || e), 'err'); }
   }
   function exportSvg() {
     ensure();
-    if (ST.noCanvas || !ok2d(ST.out)) return;
+    if (ST.noCanvas || !ok2d(ST.out)) return toast(t('img.empty'), 'err');
     const url = ST.out.toDataURL('image/png');
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${ST.out.width}" height="${ST.out.height}"><image href="${url}" width="${ST.out.width}" height="${ST.out.height}"/></svg>`;
     const blob = new Blob([svg], { type: 'image/svg+xml' });
-    const a = el('a', { href: URL.createObjectURL(blob), download: 'jarvis-' + Date.now() + '.svg' });
-    a.click();
+    window.J.download(blob, 'jarvis-' + Date.now() + '.svg', t('img.saved'));
   }
   function reset() {
     ST.adj = { brightness: 100, contrast: 100, saturate: 100, hue: 0, blur: 0, sepia: 0, gray: 0, invert: 0, vignette: 0, grain: 0, sharpen: 0 };
@@ -588,7 +589,10 @@
     const url = URL.createObjectURL(blob);
     preview.src = url;
     under.appendChild(preview);
-    const dl = btn(t('vid.save'), () => { const a = el('a', { href: url, download: 'jarvis-video-' + Date.now() + '.webm' }); a.click(); });
+    const dl = btn(t('vid.save'), async () => {
+      try { const b = await (await fetch(url)).blob(); window.J.download(b, 'jarvis-video-' + Date.now() + '.webm', t('vid.save')); }
+      catch { window.J.openLink(url); }
+    });
     under.appendChild(el('div', { class: 'row wrap' }, dl, el('span', { class: 'tiny muted', text: (blob.size / 1024 / 1024).toFixed(1) + ' Mo · ' + size.w + '×' + size.h + ' · ' + fps + ' fps' })));
     toast(t('vid.ready'), 'ok');
   }

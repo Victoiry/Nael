@@ -67,8 +67,8 @@
       list.appendChild(row);
     });
     const addBtn = el('button', { class: 'btn sm' }, icon('plus', 15), t('set.newProfile'));
-    addBtn.addEventListener('click', () => {
-      const name = prompt(t('set.profileName'));
+    addBtn.addEventListener('click', async () => {
+      const name = await J.ask({ title: t('set.newProfile'), label: t('set.profileName'), ok: t('common.add') });
       if (!name) return;
       const np = DEFAULT_PROFILE(); np.name = name;
       S.settings.profiles.push(np); S.settings.activeProfile = S.settings.profiles.length - 1; save('settings'); render('personalize');
@@ -103,7 +103,11 @@
 
     const voices = (window.speechSynthesis ? speechSynthesis.getVoices() : []).map((v) => ({ v: v.name, l: `${v.name} (${v.lang})` }));
     const voiceBtn = el('button', { class: 'btn sm' }, icon('volume', 15), t('set.voice'));
-    voiceBtn.addEventListener('click', () => window.J.speak(t('land.hero')));
+    voiceBtn.addEventListener('click', () => {
+      const v = voices.find((x) => x.v === p.voice);
+      toast(t('set.voiceTest') + (v ? ' — ' + v.l : ''));
+      window.J.speak(t('land.hero'));
+    });
     box.appendChild(section('set.voice',
       field('set.voice', selectInput([{ v: '', l: '— ' + t('common.none') + ' —' }, ...voices], p.voice, (v) => updateProfile({ voice: v }))),
       slider('set.voiceRate', 0.5, 2, 0.05, p.voiceRate || 1, (v) => updateProfile({ voiceRate: v })),
@@ -199,8 +203,8 @@
     const chan = el('span', { class: 'chip', text: t('or.checking') });
     const chanInfo = el('div', { class: 'tiny muted', text: t('or.channelHelp') });
     const paintChan = (c) => {
-      chan.className = 'chip ' + (c === 'direct' ? 'paid' : c === 'server' ? 'free' : 'danger');
-      chan.textContent = c === 'direct' ? t('or.channel.direct') : c === 'server' ? t('or.channel.server') : t('or.channel.none');
+      chan.className = 'chip ' + (c === 'direct' || c === 'relay' ? 'paid' : c === 'server' ? 'free' : 'danger');
+      chan.textContent = ({ direct: t('or.channel.direct'), server: t('or.channel.server'), relay: t('or.channel.relay') })[c] || t('or.channel.none');
     };
     J.ORapi.onChannel(paintChan);
     J.ORapi.detect(true).then(paintChan);
@@ -217,8 +221,27 @@
       el('div', { class: 'kv' }, el('b', { text: t('or.channel') }), chan),
       chanInfo,
       el('div', { class: 'row wrap', style: 'margin-top:.5rem' }, probeBtn,
-        (() => { const a = el('a', { class: 'btn sm', href: 'https://openrouter.ai/keys', target: '_blank', rel: 'noopener', text: t('or.keys') }); return a; })(),
-        (() => { const a = el('a', { class: 'btn sm', href: 'https://openrouter.ai/models', target: '_blank', rel: 'noopener', text: t('or.catalog') }); return a; })())));
+        (() => { const b = el('button', { class: 'btn sm' }, icon('link', 15), t('or.keys')); b.addEventListener('click', () => J.openLink('https://openrouter.ai/keys')); return b; })(),
+        (() => { const b = el('button', { class: 'btn sm' }, icon('link', 15), t('or.catalog')); b.addEventListener('click', () => J.openLink('https://openrouter.ai/models')); return b; })(),
+        (() => { const b = el('button', { class: 'btn sm' }, icon('plug', 15), t('or.diag')); b.addEventListener('click', () => runDiagnostic()); return b; })())));
+
+    const diagOut = el('div', { class: 'col', style: 'margin-top:.5rem' });
+    async function runDiagnostic() {
+      diagOut.innerHTML = '';
+      diagOut.appendChild(el('div', { class: 'tiny muted dots', text: t('or.checking') }));
+      const r = await J.ORapi.diagnose(S.key || '');
+      diagOut.innerHTML = '';
+      r.steps.forEach((st) => diagOut.appendChild(el('div', { class: 'kv' },
+        el('span', { class: st.ok ? 'chip free' : 'chip danger', text: t('or.step.' + st.step) }),
+        el('span', { class: 'tiny', style: 'text-align:right;flex:1', text: st.detail }))));
+      if (r.channel) paintChan(r.channel);
+      const copyBtn = el('button', { class: 'btn sm' }, icon('copy', 15), t('or.copyDiag'));
+      copyBtn.addEventListener('click', () => {
+        window.J.copy('JARVIS — diagnostic OpenRouter\n' + r.steps.map((st) => (st.ok ? 'OK  ' : 'KO  ') + st.step + ' : ' + st.detail).join('\n') + '\ncanal=' + r.channel);
+        toast(t('toast.copied'), 'ok');
+      });
+      diagOut.appendChild(el('div', { class: 'row wrap', style: 'margin-top:.4rem' }, copyBtn));
+    }
 
     const testBtn = el('button', { class: 'btn sm' }, icon('check', 15), t('model.test'));
     testBtn.addEventListener('click', async () => {
@@ -246,8 +269,8 @@
       el('div', { class: 'tiny muted', text: t('file.desc') }),
       el('div', { class: 'tiny muted', text: t('skill.pre') }),
       el('div', { class: 'row wrap', style: 'margin-top:.4rem' },
-        (() => { const b = el('button', { class: 'btn sm' }, icon('layers', 15), t('rag.title')); b.addEventListener('click', () => window.Chat.openPlus ? window.Chat.openPlus('rag') : null); return b; })(),
-        (() => { const b = el('button', { class: 'btn sm' }, icon('bolt', 15), t('skill.title')); b.addEventListener('click', () => window.Chat.openPlus ? window.Chat.openPlus('skill') : null); return b; })()));
+        (() => { const b = el('button', { class: 'btn sm' }, icon('layers', 15), t('rag.title')); b.addEventListener('click', () => window.Chat.openPlus('rag')); return b; })(),
+        (() => { const b = el('button', { class: 'btn sm' }, icon('bolt', 15), t('skill.title')); b.addEventListener('click', () => window.Chat.openPlus('skill')); return b; })()));
     box.appendChild(section('set.modes', tts));
     box.appendChild(section('off.title', el('div', { class: 'tiny muted', text: t('off.desc') })));
     box.appendChild(section('priv.title', el('div', { class: 'tiny muted', text: t('priv.on') })));
@@ -334,8 +357,10 @@
   // ------------------------------------------------------------ rendu
   const BUILDERS = { personalize, global: globalSec, ai: aiSec, modes: modesSec, history: historySec, memory: memorySec, console: consoleSec, bridge: bridgeSec };
 
+  let SEQ = 0;
   async function render(name) {
     PANEL.current = name || PANEL.current;
+    const seq = ++SEQ;
     const nav = document.getElementById('main-tabs');
     const body = document.getElementById('panel-body');
     if (!nav || !body) return;
@@ -347,9 +372,12 @@
     });
     const title = document.getElementById('panel-title');
     if (title) title.textContent = t((NAV.find((n) => n[0] === PANEL.current) || [])[2] || 'nav.settings');
+    let built;
+    try { built = await BUILDERS[PANEL.current](); }
+    catch (e) { built = el('div', { class: 'notice danger', text: String(e.message || e) }); }
+    if (seq !== SEQ) return;            // un rendu plus recent a deja pris la main
     body.innerHTML = '';
-    try { body.appendChild(await BUILDERS[PANEL.current]()); }
-    catch (e) { body.appendChild(el('div', { class: 'notice danger', text: String(e.message || e) })); }
+    body.appendChild(built);
     applyI18n(body);
   }
 

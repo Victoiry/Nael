@@ -13,10 +13,18 @@ L'aperçu (panneau à droite) affiche déjà le site en direct. Vous pouvez vér
 - **Changer la langue** (français / English / Español / Italiano) en haut à droite ;
 - les onglets **Personnaliser / Paramètres globaux / Paramètres IA / Historique / Mémoire / Console agent / Pont local** ;
 - le **redimensionnement du panneau** (glissez la petite barre entre le chat et le panneau de droite, double-clic = 25 %) ;
-- la pop-up « Quel modèle voulez-vous tester ? » avec l'**avertissement en rouge** : la liste s'affiche en mode secours ;
+- la pop-up « Quel modèle voulez-vous tester ? » avec l'**avertissement en rouge** (liste **exclusivement issue de l'API OpenRouter**, modèles payants d'abord) ;
 - les boutons du bas : Image, Vidéo, Multitâche, Comparaison, Code, Privé, Hors connexion.
 
-> ⚠️ **Limite de l'aperçu** : le bac à sable n'a **pas d'accès réseau vers `openrouter.ai`**. Le test de clé, les modèles, le chat et les images y renverront une erreur réseau. Ce n'est pas un bug de JARVIS — faites l'option 2 pour le test réel.
+> ⚠️ **Limite de l'aperçu** : le bac à sable n'a **pas d'accès réseau vers `openrouter.ai`**. JARVIS le dit clairement (bandeau + badge « inaccessible ») et propose **trois solutions** : le canal serveur, le canal navigateur direct, et le **relais par votre PC** (lancez `JARVIS-Setup.bat`, laissez la fenêtre ouverte : le badge passe à « via votre PC » et l'appel OpenRouter part de chez vous). Pour le test réel complet, faites l'option 2.
+
+### 🧷 Vérifier que TOUS les boutons fonctionnent (nouveau)
+```bash
+node tools/verify-buttons.js    # clique chaque bouton : aucun ne doit rester sans effet
+node tools/verify-surface.js    # audit statique : aucun appel mort, aucun élément manquant
+node tools/verify-flow.js       # parcours réel : accueil -> sans compte -> envoi -> réponse -> panneau -> 4 langues
+node tools/verify-relay.js      # canal « via votre PC » : protocole + bascule automatique
+```
 
 ---
 

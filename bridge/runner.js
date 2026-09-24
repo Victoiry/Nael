@@ -82,6 +82,29 @@ async function webSearch(query) {
   } catch (e) { return [{ title: 'search error: ' + e.message, url: '' }]; }
 }
 
+/** Appel HTTPS fait depuis CET ordinateur (utilisé comme relais OpenRouter
+    quand l'hébergeur du site ne peut pas joindre openrouter.ai). */
+async function orHttp(p) {
+  const url = String(p.url || '');
+  const allowed = /^https:\/\/openrouter\.ai\/api\/v1\//.test(url) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(url);
+  if (!allowed) return 'ERROR: url non autorisée';
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), Math.min(Number(p.timeout) || 90000, 180000));
+    const r = await fetch(url, {
+      method: p.method || 'GET',
+      headers: p.headers || {},
+      body: p.method && p.method !== 'GET' ? p.body : undefined,
+      signal: ctrl.signal,
+    });
+    const txt = await r.text();
+    clearTimeout(to);
+    return JSON.stringify({ status: r.status, text: txt.slice(0, 300000) });
+  } catch (e) {
+    return JSON.stringify({ status: 0, text: 'ERROR: ' + (e.message || e) });
+  }
+}
+
 async function handle(task) {
   const p = task.payload || {};
   switch (task.type) {
@@ -105,6 +128,7 @@ async function handle(task) {
       return { output: data ? 'screenshot taken' : 'screenshot failed', image: data };
     }
     case 'web_search': return { output: JSON.stringify(await webSearch(p.query)) };
+    case 'or_http': return { output: await orHttp(p) };
     case 'calendar_add':
       return { output: 'calendar service not connected on this machine — ask the user to connect one in Settings > Integrations' };
     default: return { output: 'unknown task ' + task.type };

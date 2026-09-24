@@ -2,6 +2,11 @@
 (function () {
   const { S, t, el, save, modal, toast, API, applyTheme, applyI18n, setLang, esc, countdownModal, LS, ico, icon } = window.J;
   const A = { pendingPair: null, code: null };
+  const linkBtn = (url, label, cls) => {
+    const b = el('button', { class: 'btn sm ' + (cls || '') }, icon('link', 15), label);
+    b.addEventListener('click', () => J.openLink(url));
+    return b;
+  };
   const approving = new Set();
   let verifyTimer = null;
 
@@ -28,6 +33,16 @@
     if (newBtn0) { newBtn0.innerHTML = ''; newBtn0.append(icon('plus', 17), el('span', { text: t('nav.new') })); }
     setIcon('side-toggle', 'panel'); setIcon('sidebar-toggle', 'menu'); setIcon('panel-toggle', 'gear');
     setIcon('panel-close', 'close'); setIcon('errbar-close', 'close');
+    setupPanelResize();
+    document.getElementById('errbar-close')?.addEventListener('click', () => document.getElementById('errbar').classList.remove('on'));
+    // bandeau vocal / Live : ces deux boutons doivent répondre
+    document.getElementById('hud-stop')?.addEventListener('click', () => window.Chat.stopVoice());
+    document.getElementById('hud-send')?.addEventListener('click', () => {
+      const val = (window.Chat.ta && window.Chat.ta.value || '').trim();
+      window.Chat.stopVoice();
+      if (val) window.Chat.send(val, { noSpeak: !S.settings.ai.ttsAuto });
+      else toast(t('msg.placeholder'), 'err');
+    });
     setIcon('btn-auth-top', 'user'); setIcon('send-btn', 'send');
     document.addEventListener('jarvis:lang', () => { const b = document.getElementById('btn-new'); if (b) { b.innerHTML = ''; b.append(icon('plus', 17), el('span', { text: t('nav.new') })); } });
 
@@ -100,7 +115,7 @@
       el('div', { class: 'tiny muted', text: t('onb.step1.a') }),
       el('div', { class: 'tiny muted', text: t('onb.step1.b') }),
       el('div', { class: 'tiny muted', text: t('onb.step1.c') }),
-      el('a', { class: 'btn sm', href: 'https://openrouter.ai/keys', target: '_blank', rel: 'noopener', style: 'margin-top:.4rem' }, icon('link', 15), t('onb.step1.link')));
+      (() => { const b = el('button', { class: 'btn sm', style: 'margin-top:.4rem' }, icon('link', 15), t('onb.step1.link')); b.addEventListener('click', () => J.openLink('https://openrouter.ai/keys')); return b; })());
 
     const keyInput = el('input', { type: 'password', placeholder: t('onb.step2.p'), value: S.key || '' });
     mk(2, 'onb.step2.t', keyInput, el('div', { class: 'tiny muted', text: t('onb.free') }));
@@ -108,10 +123,11 @@
     body.appendChild(steps);
 
     const testBtn = el('button', { class: 'btn primary' }, icon('check', 16), t('onb.test'));
-    const skip = el('button', { class: 'btn', text: t('auth.guest'), onclick: () => { m.close(); enterApp(); } });
+    const skip = el('button', { class: 'btn', id: 'onb-skip', text: t('auth.guest'), onclick: () => { m.close(); enterApp(); } });
+    keyInput.addEventListener('input', () => { keyInput.style.borderColor = ''; });
     testBtn.addEventListener('click', () => {
       const k = keyInput.value.trim();
-      if (!/^sk-or-v1-/.test(k)) return toast(t('auth.err.invalid'), 'err');
+      if (!/^sk-or-v1-/.test(k)) { keyInput.style.borderColor = 'var(--danger)'; return toast(t('auth.err.invalid'), 'err'); }
       openModelTest(k, m);
     });
     const m = modal({ title: t('onb.title'), sub: t('auth.subtitle'), body, foot: [skip, testBtn], vert: true, closeable: !force });
@@ -119,7 +135,8 @@
   }
 
   // ---------- quel modèle tester ? (popup verticale, liste issue de l'API OpenRouter)
-  async function openModelTest(key, prevModal) {
+  async function openModelTest(keyInput, prevModal) {
+    let key = String(keyInput || '').trim();
     const body = el('div', {});
     body.appendChild(el('div', { class: 'notice danger' },
       el('div', { class: 'bold-red', text: t('model.warn') }),
@@ -143,16 +160,16 @@
         el('div', { class: 'tiny', text: t('model.paidDetail') }),
         el('div', { class: 'tiny muted', text: t('or.channelHelp') }),
         el('div', { class: 'row wrap', style: 'margin-top:.6rem' },
-          el('a', { class: 'btn sm', href: 'https://openrouter.ai/docs/features/model-routing', target: '_blank', rel: 'noopener', text: t('model.docs') }),
-          el('a', { class: 'btn sm', href: 'https://openrouter.ai/models', target: '_blank', rel: 'noopener', text: t('model.pricing') }),
-          el('a', { class: 'btn sm', href: 'https://openrouter.ai/keys', target: '_blank', rel: 'noopener', text: t('or.keys') }))),
+          linkBtn('https://openrouter.ai/docs/features/model-routing', t('model.docs')),
+          linkBtn('https://openrouter.ai/models', t('model.pricing')),
+          linkBtn('https://openrouter.ai/keys', t('or.keys')))),
     }));
 
     let models = [], selected = null, unlocked = false;
 
     const paintChannel = (via) => {
-      chanChip.className = 'chip ' + (via === 'direct' ? 'paid' : via === 'server' ? 'free' : 'danger');
-      chanChip.textContent = via === 'direct' ? t('or.channel.directShort') : via === 'server' ? t('or.channel.serverShort') : t('or.channel.none');
+      chanChip.className = 'chip ' + (via === 'direct' || via === 'relay' ? 'paid' : via === 'server' ? 'free' : 'danger');
+      chanChip.textContent = ({ direct: t('or.channel.directShort'), server: t('or.channel.serverShort'), relay: t('or.channel.relayShort') })[via] || t('or.channel.none');
     };
     J.ORapi.onChannel(paintChannel);
     paintChannel(J.ORapi.channel);
@@ -210,6 +227,8 @@
 
     btnTest.addEventListener('click', async () => {
       if (!selected) return toast(t('model.selected'), 'err');
+      if (!key || !/^sk-or-v1-/.test(key)) key = (LS.getRaw('key', '') || '').trim();
+      if (!key) { keyField.classList.remove('hidden'); keyField.querySelector('input').focus(); return toast(t('or.err.sans_cle'), 'err'); }
       const info = models.find((x) => x.id === selected);
       if (info && !info.free && !unlocked) return toast(t('paid.title'), 'err');
       btnTest.disabled = true; btnTest.textContent = t('model.testing');
@@ -220,7 +239,7 @@
       out.className = 'notice test-out ' + (r.ok ? 'ok' : 'danger');
       out.innerHTML = `<b>${r.ok ? t('model.ok') : t('model.fail')}</b> — ${t('model.latency')} ${r.latency} ms`
         + (r.status ? ` · HTTP ${r.status}` : '')
-        + ` · ${r.via === 'direct' ? t('or.channel.directShort') : t('or.channel.serverShort')}`
+        + ` · ${({ direct: t('or.channel.directShort'), server: t('or.channel.serverShort'), relay: t('or.channel.relayShort') })[r.via] || ''}`
         + `<div class="tiny">${r.ok ? '' : esc(t('or.err.' + (r.reason || 'inconnu')))}</div>`
         + `<div class="tiny muted code">${esc((r.detail || '').slice(0, 200))}</div>`;
       if (r.via) paintChannel(r.via);
@@ -237,9 +256,14 @@
     btnSave.addEventListener('click', () => { prevModal?.close(); m.close(); openBatchStep(); });
     search.addEventListener('input', draw);
 
+    const keyIn = el('input', { type: 'password', placeholder: t('onb.step2.p'), value: key });
+    keyIn.addEventListener('input', () => { key = keyIn.value.trim(); });
+    const keyField = el('div', { class: 'field' + (key ? ' hidden' : ''), style: 'margin-top:.5rem' },
+      el('span', { text: t('onb.step2.t') }), keyIn);
+
     body.append(
       el('div', { class: 'row', style: 'margin:.6rem 0 .3rem' }, el('b', { text: t('model.list') }), el('span', { class: 'spacer' }), chanChip, btnReload, btnMore),
-      search, listBox, status, footMsg);
+      search, listBox, status, keyField, footMsg);
     const m = modal({ title: t('model.title'), sub: t('model.warn'), body, foot: [btnTest, btnSave], vert: true });
     await loadModels(true);
   }
@@ -369,11 +393,51 @@
     });
   }
 
+  // ---------- panneau droit : 1/4 de l'écran par défaut, redimensionnable au glisser
+  function setupPanelResize() {
+    const panel = document.getElementById('panel');
+    const grip = document.getElementById('panel-resizer');
+    if (!panel || !grip) return;
+    const saved = Number(LS.get('panelW', 0)) || 0;
+    const apply = (w) => {
+      const max = Math.max(300, Math.min(window.innerWidth * 0.92, 980));
+      const px = Math.round(Math.max(300, Math.min(max, w)));
+      panel.style.setProperty('--panel-w', px + 'px');
+      LS.set('panelW', px);
+      return px;
+    };
+    if (saved) apply(saved);
+    let dragging = false;
+    const move = (e) => {
+      if (!dragging) return;
+      const x = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : null);
+      if (x === null) return;
+      apply(window.innerWidth - x);
+      e.preventDefault();
+    };
+    const stop = () => {
+      if (!dragging) return;
+      dragging = false;
+      document.body.classList.remove('resizing');
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', stop);
+    };
+    grip.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      document.body.classList.add('resizing');
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', stop);
+      e.preventDefault();
+    });
+    grip.addEventListener('dblclick', () => { panel.style.removeProperty('--panel-w'); LS.set('panelW', 0); });
+    window.addEventListener('resize', () => { if (Number(LS.get('panelW', 0))) apply(Number(LS.get('panelW', 0))); });
+  }
+
   // ---------- réglages
   const PANEL_TITLE = { personalize: 'nav.personalize', global: 'nav.global', ai: 'nav.ai', modes: 'set.modes', history: 'nav.history', memory: 'nav.memory', console: 'nav.console', bridge: 'nav.bridge' };
   function showPanel(name, silent) {
-    window.Settings.render(name);
-    if (!silent) togglePanel(true, name);
+    if (silent) window.Settings.render(name);
+    else togglePanel(true, name);
   }
   function togglePanel(force, name) {
     const panel = document.getElementById('panel');
@@ -413,7 +477,10 @@
     const m = el('div', { class: 'popmenu', style: 'min-width:170px' });
     const item = (ic, label, fn) => { const r = el('div', { class: 'model-row' }, icon(ic, 15), el('div', { class: 'nm' }, el('b', { text: label }))); r.addEventListener('click', () => { m.remove(); fn(); }); return r; };
     m.append(
-      item('pencil', t('nav.rename'), () => { const n = prompt(t('nav.rename'), c.title); if (n) { c.title = n; save('conv'); renderConvList(); } }),
+      item('pencil', t('nav.rename'), async () => {
+        const n = await J.ask({ title: t('nav.rename'), label: t('nav.new'), value: c.title || '', ok: t('common.save') });
+        if (n) { c.title = n; save('conv'); renderConvList(); toast(t('toast.saved'), 'ok'); }
+      }),
       item('trash', t('nav.delete'), () => { S.conv = S.conv.filter((x) => x.id !== c.id); if (S.activeId === c.id) S.activeId = null; save('conv'); renderConvList(); window.Chat.renderMessages(); }));
     document.body.appendChild(m);
     const r = anchor.getBoundingClientRect();

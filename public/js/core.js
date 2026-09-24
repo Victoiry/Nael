@@ -165,12 +165,33 @@
   }
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  function toast(msg, kind) {
+  function toast(msg, kind, action) {
     const box = document.getElementById('toasts');
     if (!box) return;
-    const n = el('div', { class: 'toast ' + (kind || ''), text: msg });
+    const n = el('div', { class: 'toast ' + (kind || '') }, el('span', { text: msg }));
+    if (action && action.label && action.onClick) {
+      const b = el('button', { class: 'btn sm', text: action.label });
+      b.addEventListener('click', () => { try { action.onClick(); } finally { n.remove(); } });
+      n.appendChild(b);
+    }
     box.appendChild(n);
-    setTimeout(() => { n.style.opacity = '0'; setTimeout(() => n.remove(), 250); }, 3800);
+    setTimeout(() => { n.style.opacity = '0'; setTimeout(() => n.remove(), 250); }, action ? 8000 : 3800);
+  }
+
+  /** Telechargement qui marche AUSSI dans un apercu en iframe :
+      on tente le lien, et on propose toujours « Ouvrir » (URL blob gardee 2 min). */
+  function download(blob, filename, label) {
+    let url = '';
+    try { url = URL.createObjectURL(blob); } catch { url = ''; }
+    if (!url) return toast(String(filename), 'err');
+    const a = el('a', { href: url, download: filename, style: 'display:none' });
+    document.body.appendChild(a);
+    try { a.click(); } catch {}
+    a.remove();
+    toast((label || t('common.saved')) + ' — ' + filename, 'ok',
+      { label: t('common.open'), onClick: () => openLink(url) });
+    setTimeout(() => { try { URL.revokeObjectURL(url); } catch {} }, 120000);
+    return url;
   }
 
   function modal({ title, sub, body, foot, vert, closeable = true, onClose } = {}) {
@@ -223,6 +244,50 @@
       return m;
     }
     return modal({ title, sub, body, foot: btns, vert: true });
+  }
+
+  /** Remplace window.prompt : saisie dans une vraie fenêtre JARVIS
+      (les invites natives sont bloquées dans un aperçu en iframe). */
+  function ask({ title, label, value = '', placeholder = '', ok = null } = {}) {
+    return new Promise((resolve) => {
+      const input = el('input', { type: 'text', value: value == null ? '' : value, placeholder });
+      const okBtn = el('button', { class: 'btn primary', text: ok || t('common.ok') });
+      const noBtn = el('button', { class: 'btn', text: t('common.cancel') });
+      const m = modal({
+        title: title || '', body: el('div', { class: 'field' }, label ? el('span', { text: label }) : null, input),
+        foot: [noBtn, okBtn], vert: true, onClose: () => resolve(null),
+      });
+      const done = (v) => { const out = m.el ? null : null; m.close(); resolve(v); };
+      okBtn.addEventListener('click', () => done(input.value.trim()));
+      noBtn.addEventListener('click', () => done(null));
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') done(input.value.trim()); });
+      setTimeout(() => input.focus(), 80);
+    });
+  }
+
+  /** Remplace window.confirm. */
+  function confirmBox({ title, body, ok, danger } = {}) {
+    return new Promise((resolve) => {
+      const okBtn = el('button', { class: 'btn ' + (danger ? 'danger' : 'primary'), text: ok || t('common.ok') });
+      const noBtn = el('button', { class: 'btn', text: t('common.cancel') });
+      const m = modal({ title: title || '', body: typeof body === 'string' ? el('div', { text: body }) : body, foot: [noBtn, okBtn], vert: true, onClose: () => resolve(false) });
+      okBtn.addEventListener('click', () => { m.close(); resolve(true); });
+      noBtn.addEventListener('click', () => { m.close(); resolve(false); });
+    });
+  }
+
+  /** Ouvre un lien externe même dans un aperçu : fenêtre, sinon onglet, sinon copie. */
+  function openLink(url) {
+    try { const w = window.open(url, '_blank', 'noopener'); if (w) return true; } catch {}
+    try {
+      const a = document.createElement('a');
+      a.href = url; a.target = '_blank'; a.rel = 'noopener';
+      document.body.appendChild(a); a.click(); a.remove();
+      return true;
+    } catch {}
+    copy(url);
+    toast(t('toast.copied') + ' — ' + url);
+    return false;
   }
 
   // ---------------------------------------------------------------- API
@@ -289,33 +354,73 @@
   };
 
   // ---------------------------------------------------------------- OpenRouter unifié
-  /* Deux canaux possibles :
-     - « server » : le serveur Node joint openrouter.ai (déploiement normal) ;
-     - « direct » : le serveur est bloqué → le navigateur parle à OpenRouter.
-     La liste des modèles vient TOUJOURS de l'API (aucune liste pré-écrite). */
+  /* TROIS canaux, essayés dans l'ordre, avec bascule automatique :
+       1. « server » : le serveur JARVIS joint openrouter.ai (déploiement normal) ;
+       2. « direct » : votre navigateur parle directement à l'API OpenRouter ;
+       3. « relay »  : le pont local (fichier .bat, sur VOTRE ordinateur) fait
+                       l'appel — utile si l'hébergeur bloque openrouter.ai.
+     La liste des modèles vient TOUJOURS de l'API : aucune liste pré-écrite. */
   const ORapi = {
     channel: 'unknown',
+    relay: false,
     lastError: null,
+    detail: '',
     listeners: [],
 
-    onChannel(fn) { this.listeners.push(fn); fn(this.channel); },
+    onChannel(fn) { this.listeners.push(fn); try { fn(this.channel); } catch {} return fn; },
     setChannel(c) {
-      if (this.channel === c) return c;
-      this.channel = c;
+      if (this.channel !== c) { this.channel = c; }
       this.listeners.forEach((fn) => { try { fn(c); } catch {} });
       return c;
     },
 
-    /** Choisit le canal : serveur d'abord, navigateur ensuite. */
+    /** Le pont local est-il connecté ? (troisième canal possible) */
+    async checkRelay() {
+      try {
+        const st = await API.call('/api/bridge/status');
+        this.relay = !!st.online;
+      } catch { this.relay = false; }
+      return this.relay;
+    },
+
+    /** Choisit le canal : serveur, sinon navigateur, sinon pont local. */
     async detect(force) {
       if (!force && this.channel !== 'unknown') return this.channel;
       let probe = {};
       try { probe = await API.call('/api/or-probe'); } catch {}
       if (probe && probe.ok) return this.setChannel('server');
       const direct = window.OR ? await window.OR.probeDirect() : { ok: false };
+      this.lastError = (probe && probe.error) || (direct && direct.error) || 'reseau';
+      this.detail = (probe && probe.error) || '';
       if (direct.ok) return this.setChannel('direct');
-      this.lastError = (probe && probe.error) || direct.error || 'reseau';
+      if (await this.checkRelay()) return this.setChannel('relay');
       return this.setChannel('none');
+    },
+
+    // ---------- relais par le pont local (l'ordinateur de l'utilisateur)
+    async relayCall(path, { method = 'GET', key, body, timeout = 90000 } = {}) {
+      const r = await API.call('/api/or-relay', { method: 'POST', body: { path, method, key, body, timeout } });
+      if (!r || r.ok !== true) {
+        const offline = r && (r.error === 'bridge_offline' || r.error === 'no_session');
+        return { ok: false, reason: offline ? 'pont_hors_ligne' : (r && r.error) || 'relais_indisponible', error: (r && (r.detail || r.error)) || '' };
+      }
+      return { ok: true, status: r.status, text: r.text || '' };
+    },
+
+    /** Liste des modèles via le pont local. */
+    async relayModels(key) {
+      const r = await this.relayCall('/models', { key, timeout: 45000 });
+      if (!r.ok) return { ok: false, reason: r.reason, error: r.error, models: [] };
+      if (r.status >= 400) {
+        let msg = '';
+        try { msg = JSON.parse(r.text).error.message; } catch { msg = r.text.slice(0, 200); }
+        return { ok: false, status: r.status, reason: window.OR ? window.OR.human(msg, r.status) : 'openrouter_erreur', error: msg, models: [] };
+      }
+      let list = [];
+      try { list = (JSON.parse(r.text).data || []).map((m) => window.OR.normalize(m)); } catch { return { ok: false, reason: 'flux_interrompu', models: [] }; }
+      list.sort((a, b) => (a.free === b.free ? String(a.name).localeCompare(String(b.name)) : (a.free ? 1 : -1)));
+      if (!list.length) return { ok: false, reason: 'liste_vide', models: [] };
+      return { ok: true, models: list, via: 'relay' };
     },
 
     /** Liste des modèles, canal adapté + bascule automatique. */
@@ -330,45 +435,68 @@
         if (!window.OR) return { ok: false, reason: 'inconnu' };
         const r = await window.OR.models({ key });
         if (r.ok) { this.setChannel('direct'); return { ok: true, models: r.models, via: 'direct' }; }
+        if (r.cors) this.lastError = 'cors';
         return { ok: false, via: 'direct', error: r.error, reason: r.reason };
       };
-      let out = this.channel === 'direct' ? await tryDirect() : await tryServer();
-      if (!out.ok) {
-        out = this.channel === 'direct' ? await tryServer() : await tryDirect();
+      const order = this.channel === 'direct' ? [tryDirect, tryServer] : this.channel === 'relay' ? [() => this.relayModels(key), tryServer, tryDirect] : [tryServer, tryDirect, () => this.relayModels(key)];
+      let out = { ok: false, reason: 'inconnu' };
+      for (const fn of order) {
+        out = await fn();
+        if (out.ok) { if (out.via) this.setChannel(out.via); this.detail = ''; return out; }
+        this.lastError = out.reason || this.lastError;
+        this.detail = out.error || this.detail;
       }
-      if (!out.ok) {
-        this.lastError = out.reason || 'reseau';
-        if (this.channel !== 'none') this.setChannel('none');
-      } else if (out.via === 'direct') this.setChannel('direct');
+      if (this.channel !== 'none') this.setChannel('none');
       return out;
     },
 
-    /** Test de la clé : serveur d'abord, puis navigateur (et inversement). */
+    /** Test de la clé sur tous les canaux disponibles. */
     async testKey(key, model) {
       await this.detect();
       const tryServer = async () => {
         const r = await API.call('/api/test-key', { method: 'POST', body: { key, model } });
         const ok = !!r && r.ok === true;
-        const network = !!r && r.status === 0;
-        const detail = (r && r.detail) || '';
+        const network = !!r && (r.status === 0 || r.offline);
         if (ok) return { ok: true, status: r.status, latency: r.latency, model: r.model || model, via: 'server' };
-        // 401/402/429 : la réponse vient bien d'OpenRouter → inutile de basculer
-        if (!network && r && r.status) return { ok: false, status: r.status, latency: r.latency, detail, reason: (r.status === 401 ? 'cle_invalide' : r.status === 402 ? 'credit' : r.status === 429 ? 'debit' : 'openrouter_erreur'), via: 'server' };
-        return { ok: false, status: 0, detail, reason: 'reseau_ou_cors', via: 'server' };
+        if (!network && r && r.status) return { ok: false, status: r.status, latency: r.latency, detail: r.detail, reason: (r.status === 401 ? 'cle_invalide' : r.status === 402 ? 'credit' : r.status === 429 ? 'debit' : 'openrouter_erreur'), via: 'server' };
+        return { ok: false, status: 0, detail: r && r.detail, reason: 'reseau_ou_cors', via: 'server' };
       };
       const tryDirect = async () => {
         if (!window.OR) return { ok: false, reason: 'inconnu', via: 'direct' };
         const r = await window.OR.testKey(key, model);
-        if (r.ok) { this.setChannel('direct'); return { ...r, via: 'direct' }; }
-        return { ...r, via: 'direct', reason: r.reason || 'inconnu' };
+        if (r.ok) this.setChannel('direct');
+        return Object.assign({ via: 'direct' }, r, { reason: r.reason || 'inconnu' });
       };
-      let out = this.channel === 'direct' ? await tryDirect() : await tryServer();
-      if (!out.ok && (out.status === 0 || !out.status)) out = this.channel === 'direct' ? await tryServer() : await tryDirect();
-      if (out.ok && out.via === 'direct') this.setChannel('direct');
+      const tryRelay = async () => {
+        const r = await this.relayCall('/chat/completions', { method: 'POST', key, timeout: 60000,
+          body: { model: model || this.firstFreeId(), messages: [{ role: 'user', content: 'ping' }], max_tokens: 4, stream: false } });
+        if (!r.ok) return { ok: false, status: 0, reason: r.reason, error: r.error, via: 'relay' };
+        if (r.status >= 400) {
+          let msg = r.text.slice(0, 200);
+          try { msg = JSON.parse(r.text).error.message; } catch {}
+          return { ok: false, status: r.status, reason: window.OR ? window.OR.human(msg, r.status) : 'openrouter_erreur', detail: msg, via: 'relay' };
+        }
+        this.setChannel('relay');
+        return { ok: true, status: r.status, model, via: 'relay' };
+      };
+      const order = this.channel === 'direct' ? [tryDirect, tryServer, tryRelay]
+        : this.channel === 'relay' ? [tryRelay, tryServer, tryDirect]
+        : [tryServer, tryDirect, tryRelay];
+      let out = { ok: false, reason: 'inconnu' };
+      for (const fn of order) {
+        out = await fn();
+        if (out.ok || (out.status && out.status >= 400)) { if (out.via) this.setChannel(out.via); return out; }
+      }
       return out;
     },
 
-    /** Chat : streaming via le canal disponible, bascule transparente sur l'autre. */
+    firstFreeId() {
+      const l = (window.Chat && window.Chat.MODELS && window.Chat.MODELS.list) || [];
+      const f = l.find((m) => m.free) || l[0];
+      return f ? f.id : '';
+    },
+
+    /** Chat en streaming : serveur → navigateur → relais (relais = réponse d'un bloc, rejouée en streaming). */
     async chat(payload, handlers = {}) {
       await this.detect();
       const viaDirect = async () => {
@@ -376,6 +504,36 @@
         const r = await window.OR.stream(payload, handlers);
         if (r.ok) { this.setChannel('direct'); handlers.channel && handlers.channel('direct'); }
         return r;
+      };
+      const viaRelay = async () => {
+        const body = Object.assign({}, payload, { stream: false });
+        delete body.key;
+        const r = await this.relayCall('/chat/completions', { method: 'POST', key: payload.key, body, timeout: 180000 });
+        if (!r.ok) return { ok: false, reason: r.reason, error: r.error };
+        if (r.status >= 400) {
+          let msg = r.text.slice(0, 300);
+          try { msg = JSON.parse(r.text).error.message; } catch {}
+          handlers.error && handlers.error({ message: msg, reason: 'openrouter_erreur' });
+          return { ok: false, status: r.status, reason: 'openrouter_erreur', error: msg };
+        }
+        let content = '', reasoning = '';
+        try {
+          const j = JSON.parse(r.text);
+          const msg = (j.choices && j.choices[0] && j.choices[0].message) || {};
+          content = typeof msg.content === 'string' ? msg.content : (msg.content || []).map((c) => c.text || '').join('');
+          reasoning = msg.reasoning || '';
+        } catch { return { ok: false, reason: 'flux_interrompu', error: r.text.slice(0, 200) }; }
+        if (reasoning && handlers.reasoning) handlers.reasoning({ text: reasoning });
+        // on rejoue la réponse en petits morceaux pour garder l'effet de streaming
+        for (let i = 0; i < content.length; i += 24) {
+          if (this._stopped) break;
+          handlers.delta && handlers.delta({ text: content.slice(i, i + 24) });
+          await new Promise((res) => setTimeout(res, 8));
+        }
+        this.setChannel('relay');
+        handlers.channel && handlers.channel('relay');
+        handlers.done && handlers.done({});
+        return { ok: true, got: !!content, via: 'relay' };
       };
       const viaServer = () => new Promise((resolve) => {
         let got = false, offline = false, failed = null;
@@ -386,20 +544,28 @@
           error: (d) => { failed = d; },
           done: () => { handlers.done && handlers.done({}); },
         })).then(() => {
-          if (offline || (failed && !got && failed.status === undefined)) resolve({ ok: false, reason: 'reseau_ou_cors', error: (failed && failed.message) || '', offline });
-          else if (failed) { handlers.error && handlers.error(failed); resolve({ ok: false, reason: 'openrouter_erreur', error: failed.message }); }
-          else { if (!offline) handlers.channel && handlers.channel('server'); resolve({ ok: true, got }); }
-        }).catch((e) => resolve({ ok: false, reason: 'reseau_ou_cors', error: String(e && e.message || e) }));
+          if (offline) return resolve({ ok: false, reason: 'reseau_ou_cors', error: (failed && failed.message) || '', offline: true });
+          if (failed) return resolve({ ok: false, status: failed.status, reason: failed.status === 401 ? 'cle_invalide' : failed.status === 402 ? 'credit' : failed.status === 429 ? 'debit' : 'openrouter_erreur', error: failed.message });
+          handlers.channel && handlers.channel('server');
+          resolve({ ok: true, got });
+        }).catch((e) => resolve({ ok: false, reason: 'reseau_ou_cors', error: String((e && e.message) || e) }));
       });
-      let out = this.channel === 'direct' ? await viaDirect() : await viaServer();
-      if (!out.ok && !out.aborted && (this.channel === 'direct' ? false : out.reason === 'reseau_ou_cors')) {
-        const alt = this.channel === 'direct' ? await viaServer() : await viaDirect();
-        if (alt.ok) { this.setChannel(this.channel === 'direct' ? 'server' : 'direct'); return alt; }
-        out = alt.ok ? alt : out;
+
+      const order = this.channel === 'direct' ? [viaDirect, viaServer, viaRelay]
+        : this.channel === 'relay' ? [viaRelay, viaServer, viaDirect]
+        : [viaServer, viaDirect, viaRelay];
+      let out = { ok: false, reason: 'inconnu' };
+      for (const fn of order) {
+        out = await fn();
+        if (out.ok) {
+          if (!out.via) this.setChannel(this.channel === 'unknown' ? 'server' : this.channel);
+          return out;
+        }
+        if (out.aborted) return out;
+        // 401/402/429 : la réponse vient d'OpenRouter, inutile de changer de canal
+        if (out.status && out.status >= 400) break;
       }
-      if (!out.ok && !out.aborted) {
-        handlers.error && handlers.error({ message: out.error || out.reason, reason: out.reason });
-      }
+      handlers.error && handlers.error({ message: out.error || 'reseau_ou_cors', reason: out.reason });
       return out;
     },
 
@@ -417,33 +583,85 @@
         if (r.ok) this.setChannel('direct');
         return r;
       };
-      let out = this.channel === 'direct' ? await viaDirect() : await viaServer();
-      if (!out.ok) out = this.channel === 'direct' ? await viaServer() : await viaDirect();
+      const viaRelay = async () => {
+        const body = Object.assign({}, payload, { stream: false });
+        delete body.key;
+        const r = await this.relayCall('/chat/completions', { method: 'POST', key: payload.key, body, timeout: 180000 });
+        if (!r.ok) return { ok: false, reason: r.reason, error: r.error };
+        if (r.status >= 400) { let m = r.text.slice(0, 200); try { m = JSON.parse(r.text).error.message; } catch {} return { ok: false, reason: 'openrouter_erreur', status: r.status, error: m }; }
+        try {
+          const j = JSON.parse(r.text);
+          const msg = (j.choices && j.choices[0] && j.choices[0].message) || {};
+          const content = typeof msg.content === 'string' ? msg.content : (msg.content || []).map((c) => c.text || '').join('');
+          this.setChannel('relay');
+          return { ok: true, content, reasoning: msg.reasoning || '' };
+        } catch { return { ok: false, reason: 'flux_interrompu', error: r.text.slice(0, 200) }; }
+      };
+      const order = this.channel === 'direct' ? [viaDirect, viaServer, viaRelay]
+        : this.channel === 'relay' ? [viaRelay, viaServer, viaDirect]
+        : [viaServer, viaDirect, viaRelay];
+      let out = { ok: false, reason: 'inconnu' };
+      for (const fn of order) { out = await fn(); if (out.ok) return out; }
       return out;
     },
 
+    /** Génération d'image : serveur → navigateur → relais. */
     async image(payload) {
       await this.detect();
       const viaServer = async () => {
         const r = await API.call('/api/image', { method: 'POST', body: payload });
         if (r && r.images && r.images.length) return { ok: true, ...r };
-        return { ok: false, reason: r && r.offline ? 'reseau_ou_cors' : (r && r.error) ? 'openrouter_erreur' : 'liste_vide', error: r && r.error };
+        return { ok: false, reason: r && r.offline ? 'reseau_ou_cors' : (r && r.error) ? 'openrouter_erreur' : 'liste_vide', error: r && r.error, status: r && r.status };
       };
       const viaDirect = async () => {
         if (!window.OR) return { ok: false, reason: 'inconnu' };
         const r = await window.OR.image(payload);
-        if (r.ok) this.setChannel('direct');
+        if (r.ok && r.images.length) this.setChannel('direct');
         return r;
       };
-      let out = this.channel === 'direct' ? await viaDirect() : await viaServer();
-      if (!out.ok || !out.images || !out.images.length) {
-        const alt = this.channel === 'direct' ? await viaServer() : await viaDirect();
-        if (alt.ok && alt.images && alt.images.length) return alt;
-        out = (alt.ok && alt.images && alt.images.length) ? alt : out;
-      }
+      const viaRelay = async () => {
+        const body = Object.assign({}, payload, { modalities: ['image', 'text'], stream: false });
+        delete body.key;
+        const r = await this.relayCall('/chat/completions', { method: 'POST', key: payload.key, body, timeout: 180000 });
+        if (!r.ok) return { ok: false, reason: r.reason, error: r.error };
+        try {
+          const j = JSON.parse(r.text);
+          const msg = (j.choices && j.choices[0] && j.choices[0].message) || {};
+          const imgs = [];
+          for (const im of msg.images || []) { const u = (im.image_url && im.image_url.url) || im.url || im.image_url; if (u) imgs.push(u); }
+          if (!imgs.length && Array.isArray(msg.content)) for (const part of msg.content) { const u = (part.image_url && part.image_url.url) || part.image_url; if (u) imgs.push(u); }
+          if (imgs.length) this.setChannel('relay');
+          return { ok: imgs.length > 0, images: imgs, text: typeof msg.content === 'string' ? msg.content : '', reason: imgs.length ? null : 'modele_inconnu' };
+        } catch { return { ok: false, reason: 'flux_interrompu', error: r.text.slice(0, 200) }; }
+      };
+      const order = this.channel === 'direct' ? [viaDirect, viaServer, viaRelay]
+        : this.channel === 'relay' ? [viaRelay, viaServer, viaDirect]
+        : [viaServer, viaDirect, viaRelay];
+      let out = { ok: false, reason: 'inconnu' };
+      for (const fn of order) { out = await fn(); if (out.ok) return out; }
       return out;
     },
-    stop() { try { window.OR && window.OR.stop(); } catch {} API.stop(); },
+
+    /** Diagnostic complet : serveur → navigateur → pont local. */
+    async diagnose(key) {
+      const steps = [];
+      const t0 = Date.now();
+      let server = {};
+      try { server = await API.call('/api/or-probe'); } catch (e) { server = { ok: false, error: String(e && e.message || e) }; }
+      steps.push({ step: 'serveur', ok: !!server.ok, detail: server.ok ? 'serveur → OpenRouter OK (' + server.ms + ' ms)' : 'serveur → OpenRouter : ' + (server.error || 'échec') });
+      let direct = { ok: false };
+      if (window.OR) direct = await window.OR.probeDirect();
+      steps.push({ step: 'navigateur', ok: !!direct.ok, detail: direct.ok ? 'navigateur → OpenRouter OK (' + direct.ms + ' ms)' : 'navigateur → OpenRouter : ' + (direct.cors ? 'bloqué par CORS' : (direct.error || 'échec')) });
+      const relayOn = await this.checkRelay();
+      steps.push({ step: 'pont', ok: !!relayOn, detail: relayOn ? 'pont local (votre PC) connecté et disponible comme relais' : 'pont local non connecté (lancez JARVIS-Setup.bat pour l’activer)' });
+      if (key) {
+        const t = await this.testKey(key, null);
+        steps.push({ step: 'cle', ok: !!t.ok, detail: t.ok ? 'clé valide (' + (t.model || '') + ', via ' + t.via + ') — version ' + (t.via || '?') : 'clé : ' + t.reason + (t.detail ? ' — ' + String(t.detail).slice(0, 120) : '') });
+      }
+      return { ok: steps.some((s) => s.ok && s.step !== 'pont'), steps, ms: Date.now() - t0, channel: this.channel };
+    },
+
+    stop() { this._stopped = true; try { window.OR && window.OR.stop(); } catch {} API.stop(); setTimeout(() => { this._stopped = false; }, 50); },
   };
 
   // ---------------------------------------------------------------- markdown
@@ -595,8 +813,8 @@
   window.LANGS = LANGS;
   window.J = {
     S, t, el, esc, save, toast, modal, countdownModal, API, md, applyTheme, applyI18n, setLang, LS,
-    DEFAULTS, DEFAULT_PROFILE, LANGS, VOICE_LANGS, ico, icon, speak, stopSpeak, createSTT,
-    cloudPull, cloudPush, copy, startBg, ORapi,
+    DEFAULTS, DEFAULT_PROFILE, LANGS, VOICE_LANGS, ico, icon, speak, stopSpeak, createSTT, download,
+    cloudPull, cloudPush, copy, startBg, ORapi, ask, confirmBox, openLink,
     get state() { return S; },
   };
   document.addEventListener('DOMContentLoaded', () => { document.documentElement.lang = S.settings.lang; applyI18n(document); startBg(); });

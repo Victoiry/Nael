@@ -449,6 +449,35 @@ async function api(req, res, url) {
     }, 'JARVIS-Claude-Code.bat');
   }
 
+  // ---- Relais OpenRouter via le pont local (l'ordinateur de l'utilisateur)
+  //      Utilisé quand ni ce serveur ni le navigateur ne peuvent joindre openrouter.ai.
+  if (p === '/or-relay' && req.method === 'POST') {
+    const b = await readBody(req);
+    const path = String(b.path || '');
+    if (!path.startsWith('/') || path.includes('://')) return json(res, 400, { ok: false, error: 'bad_path' });
+    const url = or.OPENROUTER + path;
+    if (!url.startsWith(or.OPENROUTER)) return json(res, 400, { ok: false, error: 'bad_path' });
+    // une session de pont en vie ?
+    const now = Date.now();
+    const sessions = [...bridge.state.sessions.values()].filter((s) => now - s.at < 8000 && s.paired);
+    if (!sessions.length) return json(res, 200, { ok: false, error: 'bridge_offline' });
+    const sessionId = sessions[0].id;
+    const headers = { 'Content-Type': 'application/json' };
+    if (b.key) headers.Authorization = 'Bearer ' + String(b.key);
+    const task = tasks.requestTask({
+      sessionId, type: 'or_http', risk: 'safe', email: user && user.sub, needsApproval: false,
+      payload: { url, method: b.method || 'GET', headers, body: b.body ? JSON.stringify(b.body) : undefined, timeout: b.timeout },
+    });
+    const r = await tasks.waitFor(task, Math.min(Number(b.timeout) || 90000, 180000));
+    if (r.offline) return json(res, 200, { ok: false, error: 'bridge_offline' });
+    if (r.timeout) return json(res, 200, { ok: false, error: 'timeout', detail: 'le pont local n\'a pas répondu' });
+    let out = {};
+    try { out = JSON.parse((r.result && r.result.output) || '{}'); } catch {}
+    bridge.log('relay', `${b.method || 'GET'} ${path} → ${out.status || 0}`);
+    if (!out.status) return json(res, 200, { ok: false, error: 'reseau_ou_cors', detail: String(out.text || '').slice(0, 300) });
+    return json(res, 200, { ok: true, status: out.status, text: out.text || '' });
+  }
+
   // ---- OpenRouter proxy (used by the Claude Code CLI .bat)
   if (p.startsWith('/proxy')) {
     const token = req.headers['x-jarvis-token'] || String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');

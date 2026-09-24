@@ -30,12 +30,15 @@ Le serveur écoute sur `0.0.0.0` (port `PORT` si défini). Tout le site (pages, 
 5. **Fichier à exécuter** — téléchargement de `JARVIS-Setup.bat` : il installe **Claude Code CLI**, le lie à **OpenRouter** (modèle gratuit choisi) **et à ce site**. Il affiche un **numéro de vérification aléatoire**, à recopier dans le site : la liaison est vérifiée automatiquement (et manuellement via le champ prévu).
 6. **L'application** — interface **type ChatGPT**, volontairement dépouillée : barre latérale de conversations à gauche, chat centré, barre de saisie compacte, **aucun emoji** (uniquement des icônes SVG, `public/js/icons.js`). Tous les réglages avancés sont rangés derrière l'**icône engrenage** (tiroir à droite : Personnaliser · Paramètres globaux · Paramètres de l'IA · Modes · Historique · Mémoire · Console · Pont local). Les modes (Multitâche, Comparaison, Code, Privé, Hors connexion, Image, Vidéo) et le contexte (RAG, fichiers, skills) sont dans le bouton **+** de la barre de saisie.
 
-## 🔌 Branchement OpenRouter (deux canaux, bascule automatique)
+## 🔌 Branchement OpenRouter (trois canaux, bascule automatique)
 
 | Canal | Rôle |
 |---|---|
-| `server/lib/openrouter.js` | catalogue live, test de clé, streaming SSE, images, crédits (**`OPENROUTER_BASE`** permet de pointer un proxy/auto-hébergement) |
-| `public/js/openrouter.js` | client navigateur : si le serveur n'a pas accès à `openrouter.ai`, l'app parle directement à l'API depuis le navigateur (le même code, les mêmes erreurs explicites) |
+| `server/lib/openrouter.js` **(serveur)** | catalogue live, test de clé, streaming SSE, images, crédits (**`OPENROUTER_BASE`** permet de pointer un proxy/auto-hébergement) |
+| `public/js/openrouter.js` **(navigateur)** | si le serveur n'a pas accès à `openrouter.ai`, l'app parle directement à l'API depuis le navigateur (le même code, les mêmes erreurs explicites) |
+| `POST /api/or-relay` + `bridge/runner.js` **(pont local)** | si **ni** le serveur **ni** le navigateur ne peuvent joindre `openrouter.ai` : l'appel est exécuté par le `.bat` installé sur **votre** ordinateur, puis renvoyé à la page. Seules les URL de l'API OpenRouter sont autorisées, et uniquement pour un pont appairé. |
+
+L'ordre d'essai est `serveur → navigateur → pont local` ; le badge du panneau « Connexion OpenRouter » indique le canal réellement utilisé ("via votre PC" pour le relais).
 
 - `GET /api/models` → **toujours** l'API OpenRouter ; en cas d'échec réseau la réponse est `offline:true` et le navigateur prend le relais (jamais de fausse liste).
 - `GET /api/or-probe` → le serveur joint-il OpenRouter ? (affiché dans Réglages → Paramètres de l'IA)
@@ -112,6 +115,9 @@ node tools/doctor.js                                            # diagnostic (No
 node tools/verify-server-or.js                                  # canal serveur : faux OpenRouter local, catalogue/tests/SSE
 node tools/verify-openrouter.js                                 # canal navigateur : API interceptée (liste, 401, 429, 402, streaming)
 node tools/verify-clicks.js                                     # clique toute l'interface et vérifie qu'aucun clic ne casse
+node tools/verify-buttons.js                                    # CHAQUE bouton doit produire un effet (aucun bouton mort, aucune invite native)
+node tools/verify-relay.js                                      # canal « pont local » : protocole + bascule automatique du navigateur
+node tools/verify-flow.js                                       # parcours réel : accueil → sans compte → envoi → réponse → panneau → 4 langues
 node --check server/index.js && node --check bridge/runner.js   # syntaxe
 npm i --no-save jsdom && node tools/smoke.js                    # parcours front complet (jsdom)
 ```

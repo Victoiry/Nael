@@ -38,7 +38,7 @@
     const chips = el('div', { class: 'ctx-chips' });
     const box = el('div', { class: 'box' });
 
-    const plus = el('button', { class: 'ibtn tip', 'data-tip': t('msg.plus') }, icon('plus', 19));
+    const plus = el('button', { class: 'ibtn tip', id: 'plus-btn', 'data-tip': t('msg.plus') }, icon('plus', 19));
     plus.addEventListener('click', (e) => { e.stopPropagation(); openPlusMenu(plus); });
 
     const ta = el('textarea', { id: 'input', placeholder: t('msg.placeholder'), rows: 1 });
@@ -172,12 +172,15 @@
   function modelsBanner() {
     const retry = el('button', { class: 'btn sm primary' }, icon('refresh', 15), t('or.retry'));
     retry.addEventListener('click', async () => { await loadModels(true); renderMessages(); });
+    const keysBtn = el('button', { class: 'btn sm' }, icon('link', 15), t('or.keys'));
+    keysBtn.addEventListener('click', () => J.openLink('https://openrouter.ai/keys'));
+    const diagBtn = el('button', { class: 'btn sm' }, icon('plug', 15), t('or.diag'));
+    diagBtn.addEventListener('click', () => window.App.showPanel('ai'));
     return el('div', { class: 'notice danger', style: 'max-width:680px;margin:2rem auto' },
       el('b', { text: t('or.offline.title') }),
       el('div', { class: 'tiny', text: t('or.err.' + (MODELS.error || 'inconnu')) }),
       el('div', { class: 'tiny muted', text: MODELS.detail || '' }),
-      el('div', { class: 'row wrap', style: 'margin-top:.5rem' }, retry,
-        el('a', { class: 'btn sm', href: 'https://openrouter.ai/keys', target: '_blank', rel: 'noopener', text: t('or.keys') })));
+      el('div', { class: 'row wrap', style: 'margin-top:.5rem' }, retry, keysBtn, diagBtn));
   }
   function paintModelButton() {
     const btn = document.getElementById('model-btn');
@@ -201,7 +204,7 @@
       return menuAt(anchor, [
         { label: t('or.offline.title'), sub: t('or.err.' + (MODELS.error || 'inconnu')), icon: 'warning',
           onClick: async () => { await loadModels(true); renderMessages(); } },
-        { label: t('or.keys'), icon: 'link', onClick: () => window.open('https://openrouter.ai/keys', '_blank') },
+        { label: t('or.keys'), icon: 'link', onClick: () => J.openLink('https://openrouter.ai/keys') },
       ], 320);
     }
     const items = MODELS.list.slice(0, 80).map((m) => ({
@@ -412,7 +415,7 @@
   }
 
   async function runOnPC(text) {
-    const cmd = prompt(t('code.run'), (String(text).match(/`([^`]+)`/) || [])[1] || '');
+    const cmd = await J.ask({ title: t('code.run'), label: t('approval.command'), value: (String(text).match(/`([^`]+)`/) || [])[1] || '', ok: t('common.send') });
     if (!cmd) return;
     const r = await API.call('/api/bridge/command', { method: 'POST', body: { command: cmd, sessionId: S.bridge.sessionId } });
     toast(t('approval.request') + ' — ' + (r.risk || ''), 'ok');
@@ -422,7 +425,10 @@
   async function send(textOverride, opts = {}) {
     const ta = Chat.ta || document.getElementById('input');
     const text = (textOverride !== undefined ? textOverride : ta?.value || '').trim();
-    if (!text && !CTX.files.some((f) => f.image)) return;
+    if (!text && !CTX.files.some((f) => f.image)) {
+      if (textOverride === undefined) { toast(t('msg.empty'), 'err'); ta && ta.focus(); }
+      return;
+    }
     if (!S.key) { toast(t('toast.nokey'), 'err'); return window.App.startOnboarding(true); }
     if (V.sending) return;
 
@@ -638,7 +644,7 @@
     const go = el('button', { class: 'ibtn', style: 'color:var(--accent)' }, icon('send', 17));
     const run = async () => {
       const q = input.value.trim();
-      if (!q) return;
+      if (!q) { toast(t('msg.empty'), 'err'); input.focus(); return; }
       input.value = '';
       body.appendChild(el('div', { class: 'bubble', html: md('**' + t('common.you') + ' :** ' + q) }));
       const out = el('div', { class: 'bubble', html: '<span class="dots muted"></span>' });
@@ -698,6 +704,10 @@
 
   const Chat = {
     CTX, MODELS, EFFORTS, buildComposer, renderMessages, renderChips, setTab, send, toggleVoice, toggleLive,
+    openRag, openSkills,
+    openPlus: (kind) => (kind === 'rag' ? openRag()
+      : kind === 'skill' ? openSkills()
+        : openPlusMenu(document.getElementById('plus-btn') || document.getElementById('composer') || document.body)),
     stopVoice, loadModels, paidWarning, activeModel, modelInfo, contextBlock, PRESET_SKILLS, paintModelButton, hud,
     resumeFromHistory(h) {
       S.activeId = h.conv || null; setTab('classic');
