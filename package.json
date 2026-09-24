@@ -9,7 +9,9 @@
     "dev": "node server/index.js",
     "check": "node --check server/index.js && node --check bridge/runner.js",
     "doctor": "node tools/doctor.js",
-    "smoke": "node tools/smoke.js"
+    "smoke": "node tools/smoke.js",
+    "verify": "node tools/i18n-check.js && node tools/doctor.js",
+    "verify:ui": "node tools/verify-i18n-ui.js"
   },
   "engines": {
     "node": ">=18"

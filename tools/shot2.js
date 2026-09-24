@@ -10,7 +10,7 @@ const puppeteer = require('puppeteer-core');
   await page.goto('http://localhost:8787/', { waitUntil: 'load' });
   await new Promise((r) => setTimeout(r, 800));
   // 1. clic sur Commencer
-  await page.click('#btn-start');
+  await page.click('.btn-hero');
   await new Promise((r) => setTimeout(r, 500));
   await page.screenshot({ path: '/tmp/step1-onboarding.png' });
   console.log('modal ouverte:', await page.evaluate(() => !!document.querySelector('.overlay')));

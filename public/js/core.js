@@ -88,17 +88,26 @@
   const onSave = (f) => listeners.push(f);
 
   // ---------------- i18n
+  function lookup(key) {
+    const fr = window.I18N.fr || {};
+    const cur = window.I18N[S.settings.lang] || fr;
+    if (cur && cur[key] !== undefined) return cur[key];
+    if (fr[key] !== undefined) return fr[key];                     // repli sur le francais
+    if (window.I18N.en && window.I18N.en[key] !== undefined) return window.I18N.en[key];
+    return undefined;
+  }
   function t(key, vars) {
-    const dict = window.I18N[S.settings.lang] || window.I18N.fr;
-    let s = dict[key] !== undefined ? dict[key] : (window.I18N.en[key] !== undefined ? window.I18N.en[key] : key);
+    let s = lookup(key);
+    if (s === undefined) return key;                               // cle absente : on renvoie la cle (utilise par les tests)
     if (vars) for (const k of Object.keys(vars)) s = s.split('{' + k + '}').join(vars[k]);
     return s;
   }
+  // applique les traductions sans jamais laisser une cle brute a l'ecran
   function applyI18n(root) {
     const scope = root || document;
-    scope.querySelectorAll('[data-i18n]').forEach((e) => { e.textContent = t(e.dataset.i18n); });
-    scope.querySelectorAll('[data-i18n-ph]').forEach((e) => { e.placeholder = t(e.dataset.i18nPh); });
-    scope.querySelectorAll('[data-i18n-title]').forEach((e) => { e.title = t(e.dataset.i18nTitle); });
+    scope.querySelectorAll('[data-i18n]').forEach((e) => { const v = lookup(e.dataset.i18n); if (v !== undefined) e.textContent = v; });
+    scope.querySelectorAll('[data-i18n-ph]').forEach((e) => { const v = lookup(e.dataset.i18nPh); if (v !== undefined) e.placeholder = v; });
+    scope.querySelectorAll('[data-i18n-title]').forEach((e) => { const v = lookup(e.dataset.i18nTitle); if (v !== undefined) e.title = v; });
     document.documentElement.lang = S.settings.lang;
   }
   function setLang(l) { S.settings.lang = l; save('settings'); applyI18n(document); document.dispatchEvent(new CustomEvent('jarvis:lang')); }

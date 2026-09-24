@@ -141,7 +141,9 @@ const server = http.createServer((req, res) => {
     // i18n : 4 langues
     for (const l of ['fr', 'en', 'es', 'it']) {
       w.J.setLang(l);
-      const missing = [...w.document.querySelectorAll('[data-i18n]')].filter((e) => e.textContent === e.dataset.i18n).map((e) => e.dataset.i18n);
+      const I = w.I18N[l];
+      const missing = [...w.document.querySelectorAll('[data-i18n]')].filter((e) => I[e.dataset.i18n] !== undefined && !(e.textContent || '').trim()).map((e) => e.dataset.i18n)
+        .concat([...w.document.querySelectorAll('[data-i18n]')].filter((e) => /^[a-z]+\.[a-zA-Z0-9_.]+$/.test((e.textContent || '').trim())).map((e) => e.textContent.trim()));
       if (missing.length) err.push(l + ' clés manquantes: ' + missing.slice(0, 6).join(','));
     }
     console.log('i18n testé');

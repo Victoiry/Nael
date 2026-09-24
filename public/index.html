@@ -8,7 +8,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='44' fill='%2322d3ee'/><circle cx='50' cy='50' r='24' fill='%230b1220'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/app.css">
+<link rel="stylesheet" href="/css/app.css?v=1.3">
 </head>
 <body>
 
@@ -92,7 +92,7 @@
 
   <footer id="lp-footer">
     <div class="lp-credit"><span data-i18n="nav.creator">Créateur : Nael Hamouche</span> — <a href="mailto:nael.hamouche@gmail.com">nael.hamouche@gmail.com</a></div>
-    <div class="tiny muted"><span class="ver">v1.2</span> · <span data-i18n="lp.rights">Tous droits réservés</span></div>
+    <div class="tiny muted"><span class="ver">v1.3</span> · <span data-i18n="lp.rights">Tous droits réservés</span></div>
   </footer>
 </div>
 
@@ -183,11 +183,37 @@
 <noscript><div style="position:fixed;inset:auto 0 0 0;background:#2a0d16;color:#ffd7de;padding:.8rem;text-align:center;z-index:99">
 Activez JavaScript pour utiliser JARVIS.</div></noscript>
 
-<script src="/js/i18n.js"></script>
-<script src="/js/core.js"></script>
-<script src="/js/settings.js"></script>
-<script src="/js/chat.js"></script>
-<script src="/js/media.js"></script>
-<script src="/js/app.js"></script>
+<script>
+/* Filet de securite : evite tout melange entre une ancienne version en cache et la nouvelle page */
+(function () {
+  var BUILD = '1.3';
+  function hardReload() { location.replace(location.pathname + '?v=' + BUILD + '-' + Date.now()); }
+  function bar(msg) {
+    var b = document.getElementById('errbar');
+    var t = document.getElementById('errbar-msg');
+    if (!b || !t) return;
+    t.textContent = '⚠ ' + msg;
+    b.classList.add('on');
+    var btn = document.createElement('button');
+    btn.className = 'btn sm primary';
+    btn.textContent = '⟳ Recharger / Reload';
+    btn.addEventListener('click', hardReload);
+    b.insertBefore(btn, b.lastElementChild);
+  }
+  window.__JARVIS_BUILD__ = BUILD;
+  window.addEventListener('load', function () {
+    var ok = window.J && window.J.S && window.App && window.App.enterApp && window.I18N && window.I18N.fr && window.I18N.fr['lp.cta'] && window.Chat && window.Media;
+    if (ok) return;
+    bar("Ancienne version en cache : cliquez sur Recharger | Outdated cached version: click Reload");
+    document.querySelectorAll('[data-action]').forEach(function (b) { b.addEventListener('click', hardReload); });
+  });
+})();
+</script>
+<script src="/js/i18n.js?v=1.3"></script>
+<script src="/js/core.js?v=1.3"></script>
+<script src="/js/settings.js?v=1.3"></script>
+<script src="/js/chat.js?v=1.3"></script>
+<script src="/js/media.js?v=1.3"></script>
+<script src="/js/app.js?v=1.3"></script>
 </body>
 </html>

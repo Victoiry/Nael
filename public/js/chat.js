@@ -176,7 +176,7 @@
         buildComposer(); toast(t('model.selected') + ' : ' + m.id, 'ok');
       },
     })));
-    items.unshift({ label: '⚙ ' + t('model.title'), sub: t('model.doc'), onClick: () => window.App.openModelTest() });
+    items.unshift({ label: '⚙ ' + t('model.title'), sub: t('model.docs'), onClick: () => window.App.openModelTest() });
     items.splice(1, 0, { hr: true });
     menuAt(anchor, items);
   }

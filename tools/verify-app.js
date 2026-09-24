@@ -1,7 +1,7 @@
 // Vérifie que rien ne dépasse de la barre du haut et que le panneau est bien cadré (plusieurs tailles)
 const chromium = require('@sparticuz/chromium').default || require('@sparticuz/chromium');
 const puppeteer = require('puppeteer-core');
-const SIZES = [[1440, 900], [1280, 800], [1180, 720], [1024, 600], [900, 640], [768, 560], [430, 932]];
+const SIZES = [[1440, 900], [1280, 800], [1180, 720], [1024, 600], [910, 730], [900, 640], [768, 560], [430, 932]];
 (async () => {
   const browser = await puppeteer.launch({ args: [...chromium.args, '--no-sandbox', '--disable-gpu', '--single-process', '--no-zygote', '--disable-dev-shm-usage'],
     executablePath: await chromium.executablePath(), headless: true });
