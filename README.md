@@ -91,9 +91,12 @@ Les clés API restent dans votre navigateur (ou dans votre compte si vous vous c
 
 ## 🧪 Tests
 
+Guide complet : **[TESTING.md](TESTING.md)**
+
 ```bash
+node tools/doctor.js                                            # diagnostic (Node, réseau, serveur, pont)
 node --check server/index.js && node --check bridge/runner.js   # syntaxe
-npm i --no-save jsdom && node tools/smoke.js                    # parcours front complet
+npm i --no-save jsdom && node tools/smoke.js                    # parcours front complet (jsdom)
 ```
 
 ---
