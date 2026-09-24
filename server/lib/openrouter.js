@@ -1,17 +1,19 @@
-// OpenRouter client: model catalogue, key test, streaming chat, images, vision
-const OPENROUTER = 'https://openrouter.ai/api/v1';
+// OpenRouter client (server side) — catalogue, test de clé, streaming, images
+// Aucune liste pré-écrite : les modèles viennent TOUJOURS de l'API OpenRouter.
+// Base surchargeable (auto-hébergement, proxy, tests) : OPENROUTER_BASE=…
+const OPENROUTER = (process.env.OPENROUTER_BASE || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
 
-const FALLBACK_MODELS = [
-  { id: 'openai/gpt-4o-mini', name: 'GPT-4o mini', context_length: 128000, pricing: { prompt: '0.00000015', completion: '0.0000006' }, architecture: { input_modalities: ['text', 'image'] } },
-  { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', context_length: 200000, pricing: { prompt: '0.000003', completion: '0.000015' }, architecture: { input_modalities: ['text', 'image'] } },
-  { id: 'google/gemini-2.0-flash-001', name: 'Gemini 2.0 Flash', context_length: 1000000, pricing: { prompt: '0.0000001', completion: '0.0000004' }, architecture: { input_modalities: ['text', 'image'] } },
-  { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Llama 3.3 70B (free)', context_length: 131072, pricing: { prompt: '0', completion: '0' }, architecture: { input_modalities: ['text'] } },
-  { id: 'deepseek/deepseek-r1:free', name: 'DeepSeek R1 (free)', context_length: 163840, pricing: { prompt: '0', completion: '0' }, architecture: { input_modalities: ['text'] } },
-];
-
-function isFree(id) {
-  const s = String(id || '').toLowerCase();
-  return s.includes('/free') || s.includes(':free') || s.endsWith(':free');
+// ---------------------------------------------------------------- utilitaires
+/** Gratuit = tarif d'entrée ET de sortie à 0 (données de l'API) ou identifiant :free / /free. */
+function isFree(m) {
+  const id = String((m && m.id) || '').toLowerCase();
+  if (id.includes('/free') || id.includes(':free')) return true;
+  const p = m && m.pricing ? m.pricing : null;
+  if (!p) return false;
+  const a = Number(p.prompt);
+  const b = Number(p.completion);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+  return a === 0 && b === 0;
 }
 function priceOf(m) {
   const p = m && m.pricing ? Number(m.pricing.prompt) : NaN;
@@ -19,59 +21,98 @@ function priceOf(m) {
 }
 function supportsVision(m) {
   const mods = (m && m.architecture && m.architecture.input_modalities) || [];
-  return mods.includes('image') || /vl|vision|gpt-4o|gemini|claude-3|claude-4|pixtral|llava|qwen.*vl/i.test(m.id || '');
+  return mods.includes('image') || /vl|vision|gpt-4o|gpt-5|gemini|claude-3|claude-4|pixtral|llava|qwen.*vl/i.test((m && m.id) || '');
+}
+function normalize(m) {
+  return {
+    id: m.id,
+    name: m.name || m.id,
+    free: isFree(m),
+    vision: supportsVision(m),
+    context: m.context_length || m.top_provider?.context_length || 0,
+    pricePrompt: priceOf(m),
+    priceCompletion: m?.pricing ? Number(m.pricing.completion) : NaN,
+    description: String(m.description || '').slice(0, 300),
+    modalities: (m.architecture && m.architecture.input_modalities) || ['text'],
+  };
+}
+function describe(e) {
+  const c = (e && (e.cause && e.cause.code)) || (e && e.code) || '';
+  if (c === 'ENOTFOUND') return 'DNS introuvable (openrouter.ai)';
+  if (c === 'ECONNRESET' || c === 'EPIPE' || c === 'ECONNREFUSED') return 'connexion bloquée vers openrouter.ai (' + c + ')';
+  if (String(e && e.message || '').includes('SSL')) return 'connexion TLS bloquée vers openrouter.ai';
+  return String((e && e.message) || e || 'erreur réseau');
 }
 
+async function req(url, opts = {}, ms = 20000) {
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } finally { clearTimeout(to); }
+}
+
+// ---------------------------------------------------------------- catalogue
 let cache = { at: 0, list: null };
 
-async function listModels(key, { force = false } = {}) {
-  if (!force && cache.list && Date.now() - cache.at < 1000 * 60 * 10) return cache.list;
+/**
+ * Liste live depuis OpenRouter. En cas d'échec réseau on renvoie { offline:true }
+ * (jamais de fausse liste : le navigateur prend le relais côté client).
+ */
+async function listModels(key, { force = false, timeout = 15000 } = {}) {
+  if (!force && cache.list && Date.now() - cache.at < 1000 * 60 * 10) return { models: cache.list, source: 'cache' };
   try {
-    const r = await fetch(`${OPENROUTER}/models`, {
-      headers: key ? { Authorization: `Bearer ${key}` } : {},
-    });
-    if (!r.ok) throw new Error('status ' + r.status);
+    const r = await req(`${OPENROUTER}/models`, { headers: key ? { Authorization: `Bearer ${key}` } : {} }, timeout);
+    if (!r.ok) {
+      const t = await r.text().catch(() => '');
+      return { models: [], offline: true, status: r.status, error: `OpenRouter ${r.status} ${t.slice(0, 200)}` };
+    }
     const j = await r.json();
-    let list = (j.data || []).map((m) => ({ ...m, free: isFree(m.id), supportsVision: supportsVision(m) }));
-    list.sort((a, b) => {
-      if (a.free !== b.free) return a.free ? 1 : -1; // paid first (as requested)
-      return String(a.name || a.id).localeCompare(String(b.name || b.id));
-    });
+    const list = (j.data || []).map(normalize)
+      .sort((a, b) => (a.free === b.free ? String(a.name).localeCompare(String(b.name)) : (a.free ? 1 : -1))); // payants d'abord
     cache = { at: Date.now(), list };
-    return list;
+    return { models: list, source: 'live', count: list.length };
   } catch (e) {
-    const list = FALLBACK_MODELS.map((m) => ({ ...m, free: isFree(m.id), supportsVision: supportsVision(m) }))
-      .sort((a, b) => (a.free === b.free ? 0 : a.free ? 1 : -1));
-    return list;
+    return { models: [], offline: true, status: 0, error: describe(e) };
+  }
+}
+
+/** Test rapide : OpenRouter est-il joignable depuis ce processus ? */
+async function probe(ms = 6000) {
+  const started = Date.now();
+  try {
+    const r = await req(`${OPENROUTER}/models`, {}, ms);
+    return { ok: r.ok, status: r.status, ms: Date.now() - started };
+  } catch (e) {
+    return { ok: false, status: 0, ms: Date.now() - started, error: describe(e) };
   }
 }
 
 async function testKey(key, model) {
   const started = Date.now();
-  const models = await listModels(key, { force: true });
-  const fallback = models.find((m) => m.free) || { id: 'meta-llama/llama-3.3-70b-instruct:free' };
-  const target = model || fallback.id;
+  const target = model || '';
+  if (!target) {
+    const list = await listModels(key, { force: true, timeout: 12000 });
+    if (list.offline) return { ok: false, status: 0, offline: true, latency: Date.now() - started, detail: list.error };
+    const pick = list.models.find((m) => m.free) || list.models[0];
+    model = pick && pick.id;
+  }
   try {
-    const r = await fetch(`${OPENROUTER}/chat/completions`, {
+    const r = await req(`${OPENROUTER}/chat/completions`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: target,
-        messages: [{ role: 'user', content: 'ping' }],
-        max_tokens: 5,
-        stream: false,
-      }),
-    });
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Title': 'JARVIS' },
+      body: JSON.stringify({ model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 4, stream: false }),
+    }, 25000);
     const text = await r.text();
-    return { ok: r.ok, status: r.status, model: target, latency: Date.now() - started, detail: text.slice(0, 400), modelsCount: models.length };
+    return { ok: r.ok, status: r.status, model, latency: Date.now() - started, detail: text.slice(0, 400) };
   } catch (e) {
-    return { ok: false, status: 0, model: target, latency: Date.now() - started, detail: String(e.message || e), modelsCount: models.length };
+    return { ok: false, status: 0, offline: true, model, latency: Date.now() - started, detail: describe(e) };
   }
 }
 
 async function balance(key) {
   try {
-    const r = await fetch(`${OPENROUTER}/credits`, { headers: { Authorization: `Bearer ${key}` } });
+    const r = await req(`${OPENROUTER}/credits`, { headers: { Authorization: `Bearer ${key}` } }, 12000);
     if (!r.ok) return null;
     return await r.json();
   } catch { return null; }
@@ -87,20 +128,29 @@ function headers(key, extra) {
   };
 }
 
-// Streaming chat completion -> yields {delta} chunks via async generator
+// ---------------------------------------------------------------- streaming
 async function* streamChat(key, { model, messages, temperature = 0.7, maxTokens = 2048, tools }) {
   const body = { model, messages, temperature, stream: true };
   if (maxTokens) body.max_tokens = maxTokens;
   if (tools && tools.length) body.tools = tools;
-  const r = await fetch(`${OPENROUTER}/chat/completions`, { method: 'POST', headers: headers(key), body: JSON.stringify(body) });
+  let r;
+  try {
+    r = await req(`${OPENROUTER}/chat/completions`, { method: 'POST', headers: headers(key), body: JSON.stringify(body) }, 60000);
+  } catch (e) {
+    const err = new Error(describe(e));
+    err.offline = true;
+    throw err;
+  }
   if (!r.ok || !r.body) {
     const t = await r.text().catch(() => '');
-    throw new Error(`OpenRouter ${r.status}: ${t.slice(0, 300)}`);
+    const err = new Error(`OpenRouter ${r.status}: ${t.slice(0, 300)}`);
+    err.status = r.status;
+    throw err;
   }
   const reader = r.body.getReader();
   const dec = new TextDecoder();
   let buf = '';
-  while (true) {
+  for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
     buf += dec.decode(value, { stream: true });
@@ -123,7 +173,7 @@ async function* streamChat(key, { model, messages, temperature = 0.7, maxTokens 
           finish: choice.finish_reason || null,
           usage: json.usage || null,
         };
-      } catch { /* ignore partial */ }
+      } catch { /* fragment ignoré */ }
     }
   }
 }
@@ -131,16 +181,17 @@ async function* streamChat(key, { model, messages, temperature = 0.7, maxTokens 
 async function chatOnce(key, opts) {
   let out = '';
   let reasoning = '';
+  let usage = null;
   for await (const c of streamChat(key, opts)) {
     out += c.content || '';
     reasoning += c.reasoning || '';
+    usage = c.usage || usage;
   }
-  return { content: out, reasoning };
+  return { content: out, reasoning, usage };
 }
 
-async function generateImage(key, { model = 'google/gemini-2.5-flash-image-preview', prompt, size, quality, n = 1 }) {
-  // OpenRouter image generation: multimodal chat returning images
-  const r = await fetch(`${OPENROUTER}/chat/completions`, {
+async function generateImage(key, { model, prompt, size }) {
+  const r = await req(`${OPENROUTER}/chat/completions`, {
     method: 'POST',
     headers: headers(key),
     body: JSON.stringify({
@@ -149,14 +200,13 @@ async function generateImage(key, { model = 'google/gemini-2.5-flash-image-previ
       modalities: ['image', 'text'],
       ...(size ? { image_config: { aspect_ratio: size } } : {}),
     }),
-  });
+  }, 90000);
   const text = await r.text();
   if (!r.ok) throw new Error(`OpenRouter ${r.status}: ${text.slice(0, 300)}`);
-  let json; try { json = JSON.parse(text); } catch { throw new Error('bad json'); }
+  let json; try { json = JSON.parse(text); } catch { throw new Error('réponse OpenRouter illisible'); }
   const msg = json.choices?.[0]?.message || {};
   const imgs = [];
-  const images = msg.images || [];
-  for (const im of images) {
+  for (const im of msg.images || []) {
     const url = im.image_url?.url || im.url || im.image_url;
     if (url) imgs.push(url);
   }
@@ -169,4 +219,4 @@ async function generateImage(key, { model = 'google/gemini-2.5-flash-image-previ
   return { images: imgs, text: typeof msg.content === 'string' ? msg.content : '' };
 }
 
-module.exports = { listModels, testKey, streamChat, chatOnce, generateImage, isFree, priceOf, supportsVision, balance, OPENROUTER, cache };
+module.exports = { listModels, probe, testKey, streamChat, chatOnce, generateImage, isFree, priceOf, supportsVision, normalize, balance, describe, OPENROUTER, cache };

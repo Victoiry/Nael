@@ -148,7 +148,7 @@
         el('span', { class: 'chip' + (v === 'all' ? ' danger' : ''), text: S.settings.ai.approvalMode === v ? t('common.on') : t('common.off') }));
       row.addEventListener('click', () => {
         if (v === 'all') {
-          window.J.countdownModal({
+          const m = window.J.countdownModal({
             title: t('approval.danger.title'), body: t('approval.danger.body'), seconds: 5,
             foot: [
               () => el('button', { class: 'btn', text: t('common.cancel'), onclick: () => m.close() }),
@@ -195,11 +195,38 @@
       switchRow('hist.title', a.useHistory, (v) => set({ useHistory: v })),
       switchRow('set.privateDefault', a.privateDefault, (v) => set({ privateDefault: v }))));
 
+    // --- connexion OpenRouter : quel canal est utilisé, et test en direct
+    const chan = el('span', { class: 'chip', text: t('or.checking') });
+    const chanInfo = el('div', { class: 'tiny muted', text: t('or.channelHelp') });
+    const paintChan = (c) => {
+      chan.className = 'chip ' + (c === 'direct' ? 'paid' : c === 'server' ? 'free' : 'danger');
+      chan.textContent = c === 'direct' ? t('or.channel.direct') : c === 'server' ? t('or.channel.server') : t('or.channel.none');
+    };
+    J.ORapi.onChannel(paintChan);
+    J.ORapi.detect(true).then(paintChan);
+    const probeBtn = el('button', { class: 'btn sm' }, icon('plug', 15), t('or.probe'));
+    probeBtn.addEventListener('click', async () => {
+      probeBtn.disabled = true; toast(t('or.checking'));
+      const c = await J.ORapi.detect(true);
+      paintChan(c);
+      const r = await J.ORapi.models(S.key, { force: true });
+      toast(r.ok ? t('or.status.loaded', { n: r.models.length, via: r.via === 'direct' ? t('or.channel.directShort') : t('or.channel.serverShort') }) : t('or.err.' + (r.reason || 'inconnu')), r.ok ? 'ok' : 'err');
+      probeBtn.disabled = false;
+    });
+    box.appendChild(section('or.title',
+      el('div', { class: 'kv' }, el('b', { text: t('or.channel') }), chan),
+      chanInfo,
+      el('div', { class: 'row wrap', style: 'margin-top:.5rem' }, probeBtn,
+        (() => { const a = el('a', { class: 'btn sm', href: 'https://openrouter.ai/keys', target: '_blank', rel: 'noopener', text: t('or.keys') }); return a; })(),
+        (() => { const a = el('a', { class: 'btn sm', href: 'https://openrouter.ai/models', target: '_blank', rel: 'noopener', text: t('or.catalog') }); return a; })())));
+
     const testBtn = el('button', { class: 'btn sm' }, icon('check', 15), t('model.test'));
     testBtn.addEventListener('click', async () => {
       toast(t('model.testing'));
-      const r = await API.call('/api/test-key', { method: 'POST', body: { key: S.key, model: window.Chat.activeModel() } });
-      toast((r.ok ? t('model.ok') : t('model.fail')) + ' — ' + (r.latency || 0) + ' ms', r.ok ? 'ok' : 'err');
+      const r = await J.ORapi.testKey(S.key, window.Chat.activeModel());
+      toast((r.ok ? t('model.ok') : t('model.fail')) + ' — ' + (r.latency || 0) + ' ms'
+        + (r.ok ? '' : ' : ' + t('or.err.' + (r.reason || 'inconnu'))), r.ok ? 'ok' : 'err');
+      paintChan(J.ORapi.channel);
     });
     const changeBtn = el('button', { class: 'btn sm' }, icon('sliders', 15), t('onb.test'));
     changeBtn.addEventListener('click', () => window.App.startOnboarding(true));

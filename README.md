@@ -24,11 +24,23 @@ Le serveur écoute sur `0.0.0.0` (port `PORT` si défini). Tout le site (pages, 
 4. **Test avant enregistrement** — pop-up verticale « Quel modèle voulez-vous tester ? » :
    - ⚠ **en gras et rouge** : les modèles qui ne contiennent pas `/free` ou `:free` sont **payants** ;
    - bouton **Plus d'infos** → documentation OpenRouter (payants / gratuits / tarifs) ;
-   - liste des modèles **payants en premier**, badge `FREE` / `PAID`, contexte, vision ;
+   - **liste 100 % issue de l'API OpenRouter** (aucun modèle pré-écrit) : payants en premier, badge `FREE` / `PAID`, contexte, vision, prix au million de tokens ;
    - si le modèle choisi est payant → pop-up d'avertissement avec **compte à rebours de 5 s** avant de pouvoir lancer le test.
    - la clé n'est enregistrée **qu'après un test réussi**.
 5. **Fichier à exécuter** — téléchargement de `JARVIS-Setup.bat` : il installe **Claude Code CLI**, le lie à **OpenRouter** (modèle gratuit choisi) **et à ce site**. Il affiche un **numéro de vérification aléatoire**, à recopier dans le site : la liaison est vérifiée automatiquement (et manuellement via le champ prévu).
 6. **L'application** — interface **type ChatGPT**, volontairement dépouillée : barre latérale de conversations à gauche, chat centré, barre de saisie compacte, **aucun emoji** (uniquement des icônes SVG, `public/js/icons.js`). Tous les réglages avancés sont rangés derrière l'**icône engrenage** (tiroir à droite : Personnaliser · Paramètres globaux · Paramètres de l'IA · Modes · Historique · Mémoire · Console · Pont local). Les modes (Multitâche, Comparaison, Code, Privé, Hors connexion, Image, Vidéo) et le contexte (RAG, fichiers, skills) sont dans le bouton **+** de la barre de saisie.
+
+## 🔌 Branchement OpenRouter (deux canaux, bascule automatique)
+
+| Canal | Rôle |
+|---|---|
+| `server/lib/openrouter.js` | catalogue live, test de clé, streaming SSE, images, crédits (**`OPENROUTER_BASE`** permet de pointer un proxy/auto-hébergement) |
+| `public/js/openrouter.js` | client navigateur : si le serveur n'a pas accès à `openrouter.ai`, l'app parle directement à l'API depuis le navigateur (le même code, les mêmes erreurs explicites) |
+
+- `GET /api/models` → **toujours** l'API OpenRouter ; en cas d'échec réseau la réponse est `offline:true` et le navigateur prend le relais (jamais de fausse liste).
+- `GET /api/or-probe` → le serveur joint-il OpenRouter ? (affiché dans Réglages → Paramètres de l'IA)
+- `POST /api/chat`, `/api/chat-once`, `/api/image`, `/api/test-key` → erreurs typées : `cle_invalide` (401), `credit` (402), `refuse` (403), `modele_inconnu` (404), `debit` (429), `reseau_ou_cors`.
+- Gratuit/payant n'est plus deviné : un modèle est gratuit si **ses tarifs renvoyés par l'API valent 0** (ou identifiant `:free` / `/free`).
 
 ## 🧠 Fonctionnalités
 
@@ -97,6 +109,9 @@ Guide complet : **[TESTING.md](TESTING.md)**
 
 ```bash
 node tools/doctor.js                                            # diagnostic (Node, réseau, serveur, pont)
+node tools/verify-server-or.js                                  # canal serveur : faux OpenRouter local, catalogue/tests/SSE
+node tools/verify-openrouter.js                                 # canal navigateur : API interceptée (liste, 401, 429, 402, streaming)
+node tools/verify-clicks.js                                     # clique toute l'interface et vérifie qu'aucun clic ne casse
 node --check server/index.js && node --check bridge/runner.js   # syntaxe
 npm i --no-save jsdom && node tools/smoke.js                    # parcours front complet (jsdom)
 ```

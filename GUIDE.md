@@ -16,6 +16,19 @@ Si jamais : **fermez l'onglet** puis rouvrez le lien, ou **Ctrl+Shift+R**. Le ba
 - Modèle **gratuit sélectionné par défaut** : badge `FREE` visible en haut, `PAID` en rouge pour les payants.
 - L'écran ne peut plus rester vide : si un fichier manque, un bandeau **⟳ Recharger** apparaît au lieu d'une page blanche.
 
+## 🔌 Si « le lien avec OpenRouter ne marche pas »
+
+JARVIS ne contient **aucune liste de modèles écrite à l'avance** : tout vient de l'API OpenRouter.
+Deux canaux sont possibles, et l'application choisit toute seule :
+
+| Canal | Quand | Où le voir |
+|---|---|---|
+| **Serveur JARVIS → OpenRouter** | déploiement normal (le serveur a accès à Internet) | Réglages → **Paramètres de l'IA** → « Connexion OpenRouter » |
+| **Votre navigateur → OpenRouter (direct)** | si le serveur n'a pas d'accès Internet (pare-feu, hébergement bloqué) | idem, badge orange |
+
+En cas d'échec, le message est explicite (401 clé invalide, 402 crédit insuffisant, 429 trop de requêtes, réseau/bloqueur de publicités) avec un bouton **Recharger les modèles** et un lien vers `openrouter.ai/keys`.
+Astuce : un **bloqueur de publicités** peut bloquer `openrouter.ai` — désactivez-le pour ce site.
+
 ## Étape 1 — Ouvrez le lien
 Vous devez voir** obligatoirement** en bas de la page le badge vert **v2.0**.
 

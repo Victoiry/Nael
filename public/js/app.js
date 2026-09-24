@@ -118,18 +118,21 @@
     if (A.pendingPair) { m.close(); openBatchStep(A.pendingPair); }
   }
 
-  // ---------- quelle modèle tester ? (popup verticale)
+  // ---------- quel modèle tester ? (popup verticale, liste issue de l'API OpenRouter)
   async function openModelTest(key, prevModal) {
     const body = el('div', {});
     body.appendChild(el('div', { class: 'notice danger' },
       el('div', { class: 'bold-red', text: t('model.warn') }),
       el('div', { class: 'tiny', text: t('model.warn2') })));
 
+    const chanChip = el('span', { class: 'chip', text: t('or.checking') });
+    const status = el('div', { class: 'tiny muted', text: t('or.checking') });
     const search = el('input', { type: 'text', placeholder: t('model.search') });
     const listBox = el('div', { class: 'model-list', style: 'max-height:270px' });
     const footMsg = el('div', { class: 'tiny muted' });
     const btnTest = el('button', { class: 'btn primary' }, icon('check', 16), t('model.test'));
     const btnSave = el('button', { class: 'btn primary hidden' }, icon('download', 16), t('model.save'));
+    const btnReload = el('button', { class: 'btn sm' }, icon('refresh', 15), t('or.retry'));
     const btnMore = el('button', { class: 'btn sm ghost' }, icon('book', 15), t('model.more'));
 
     btnMore.addEventListener('click', () => modal({
@@ -138,42 +141,89 @@
         el('div', { class: 'notice warn' }, el('b', { class: 'bold-red', text: t('model.warn') }), el('div', { class: 'tiny', text: t('model.warn2') })),
         el('div', { class: 'tiny', text: t('model.freeDetail') }),
         el('div', { class: 'tiny', text: t('model.paidDetail') }),
+        el('div', { class: 'tiny muted', text: t('or.channelHelp') }),
         el('div', { class: 'row wrap', style: 'margin-top:.6rem' },
           el('a', { class: 'btn sm', href: 'https://openrouter.ai/docs/features/model-routing', target: '_blank', rel: 'noopener', text: t('model.docs') }),
-          el('a', { class: 'btn sm', href: 'https://openrouter.ai/models', target: '_blank', rel: 'noopener', text: t('model.pricing') }))),
+          el('a', { class: 'btn sm', href: 'https://openrouter.ai/models', target: '_blank', rel: 'noopener', text: t('model.pricing') }),
+          el('a', { class: 'btn sm', href: 'https://openrouter.ai/keys', target: '_blank', rel: 'noopener', text: t('or.keys') }))),
     }));
 
     let models = [], selected = null, unlocked = false;
 
+    const paintChannel = (via) => {
+      chanChip.className = 'chip ' + (via === 'direct' ? 'paid' : via === 'server' ? 'free' : 'danger');
+      chanChip.textContent = via === 'direct' ? t('or.channel.directShort') : via === 'server' ? t('or.channel.serverShort') : t('or.channel.none');
+    };
+    J.ORapi.onChannel(paintChannel);
+    paintChannel(J.ORapi.channel);
+
     function draw() {
       const q = search.value.toLowerCase();
       listBox.innerHTML = '';
-      models.filter((m) => !q || m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q)).slice(0, 300).forEach((m) => {
+      const shown = models.filter((m) => !q || m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q));
+      if (!shown.length) {
+        listBox.appendChild(el('div', { class: 'center muted tiny', style: 'padding:1rem', text: models.length ? t('common.none') : status.textContent }));
+        return;
+      }
+      shown.slice(0, 400).forEach((m) => {
+        const price = Number.isFinite(m.pricePrompt) && !m.free
+          ? '$' + (m.pricePrompt * 1e6).toFixed(2) + ' / M tokens'
+          : t('model.priceFree');
         const row = el('div', { class: 'model-row' + (selected === m.id ? ' active' : '') },
           el('span', { class: 'radio' }),
           el('div', { class: 'nm' }, el('b', { text: m.name }),
-            el('small', { text: m.id + ' · ' + (m.context ? (m.context / 1000).toFixed(0) + 'k' : '') + (m.vision ? ' · ' + t('model.vision') : ' · ' + t('model.novision')) })),
+            el('small', { text: m.id + (m.context ? ' · ' + (m.context / 1000).toFixed(0) + 'k' : '') + ' · ' + (m.vision ? t('model.vision') : t('model.novision')) + ' · ' + price })),
           el('span', { class: 'chip ' + (m.free ? 'free' : 'paid'), text: m.free ? 'FREE' : 'PAID' }));
         row.addEventListener('click', async () => {
-          selected = m.id; unlocked = m.free; draw();
+          selected = m.id; unlocked = !!m.free; draw();
           if (!m.free) { unlocked = await paidConsent(m.id); btnTest.disabled = !unlocked; }
+          if (m.context && S.settings.ai) S.settings.ai.context = m.context;
         });
         listBox.appendChild(row);
       });
     }
+
+    async function loadModels(force) {
+      listBox.innerHTML = '';
+      listBox.appendChild(el('div', { class: 'center muted tiny dots', style: 'padding:1rem', text: t('or.loading') }));
+      status.textContent = t('or.loading');
+      const r = await J.ORapi.models(key, { force });
+      models = r.models || [];
+      if (r.via) paintChannel(r.via);
+      if (r.ok) {
+        status.textContent = t('or.status.loaded', { n: models.length, via: r.via === 'direct' ? t('or.channel.directShort') : t('or.channel.serverShort') });
+        status.className = 'tiny muted';
+      } else {
+        status.textContent = t('or.err.' + (r.reason || 'inconnu'));
+        status.className = 'tiny bold-red';
+        listBox.innerHTML = '';
+        listBox.appendChild(el('div', { class: 'notice danger', style: 'margin:.6rem' },
+          el('b', { text: t('or.offline.title') }),
+          el('div', { class: 'tiny', text: t('or.err.' + (r.reason || 'inconnu')) }),
+          el('div', { class: 'tiny muted', text: r.error || '' })));
+      }
+      draw();
+      return r;
+    }
+
+    btnReload.addEventListener('click', () => loadModels(true));
 
     btnTest.addEventListener('click', async () => {
       if (!selected) return toast(t('model.selected'), 'err');
       const info = models.find((x) => x.id === selected);
       if (info && !info.free && !unlocked) return toast(t('paid.title'), 'err');
       btnTest.disabled = true; btnTest.textContent = t('model.testing');
-      const out = el('div', { class: 'notice' }, el('span', { class: 'dots', text: t('model.testing') }));
+      const out = el('div', { class: 'notice test-out' }, el('span', { class: 'dots', text: t('model.testing') }));
       body.querySelectorAll('.notice.test-out').forEach((n) => n.remove());
-      out.classList.add('test-out'); body.appendChild(out);
-      const r = await API.call('/api/test-key', { method: 'POST', body: { key, model: selected } });
+      body.appendChild(out);
+      const r = await J.ORapi.testKey(key, selected);
       out.className = 'notice test-out ' + (r.ok ? 'ok' : 'danger');
-      out.innerHTML = `<b>${r.ok ? t('model.ok') : t('model.fail')}</b> — ${t('model.latency')} ${r.latency} ms · HTTP ${r.status}
-        <div class="tiny muted code">${esc((r.detail || '').slice(0, 200))}</div>`;
+      out.innerHTML = `<b>${r.ok ? t('model.ok') : t('model.fail')}</b> — ${t('model.latency')} ${r.latency} ms`
+        + (r.status ? ` · HTTP ${r.status}` : '')
+        + ` · ${r.via === 'direct' ? t('or.channel.directShort') : t('or.channel.serverShort')}`
+        + `<div class="tiny">${r.ok ? '' : esc(t('or.err.' + (r.reason || 'inconnu')))}</div>`
+        + `<div class="tiny muted code">${esc((r.detail || '').slice(0, 200))}</div>`;
+      if (r.via) paintChannel(r.via);
       btnTest.disabled = false; btnTest.textContent = t('model.test');
       if (r.ok) {
         btnTest.classList.add('hidden'); btnSave.classList.remove('hidden');
@@ -187,14 +237,11 @@
     btnSave.addEventListener('click', () => { prevModal?.close(); m.close(); openBatchStep(); });
     search.addEventListener('input', draw);
 
-    body.append(el('div', { class: 'row', style: 'margin:.7rem 0 .4rem' }, el('b', { text: t('model.list') }), el('span', { class: 'spacer' }), btnMore), search, listBox, footMsg);
+    body.append(
+      el('div', { class: 'row', style: 'margin:.6rem 0 .3rem' }, el('b', { text: t('model.list') }), el('span', { class: 'spacer' }), chanChip, btnReload, btnMore),
+      search, listBox, status, footMsg);
     const m = modal({ title: t('model.title'), sub: t('model.warn'), body, foot: [btnTest, btnSave], vert: true });
-
-    listBox.appendChild(el('div', { class: 'center muted tiny dots', text: t('common.loading') }));
-    const res = await API.call('/api/models?key=' + encodeURIComponent(key));
-    models = res.models || [];
-    window.Chat.MODELS.list = models; window.Chat.MODELS.loaded = true;
-    draw();
+    await loadModels(true);
   }
 
   function paidConsent(model) {

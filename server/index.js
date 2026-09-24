@@ -129,7 +129,12 @@ async function handleChat(req, res, user) {
     send('done', { ok: true });
     res.end();
   } catch (e) {
-    try { send('error', { message: String(e.message || e) }); res.end(); } catch { res.end(); }
+    try {
+      // le serveur n'a pas pu joindre OpenRouter : le navigateur peut réessayer en direct
+      if (e && e.offline) send('offline', { message: String(e.message || e) });
+      else send('error', { message: String(e.message || e), status: e && e.status });
+      res.end();
+    } catch { res.end(); }
   }
 }
 
@@ -204,6 +209,15 @@ function sendBat(res, tplName, vars, filename) {
   res.end('\ufeff' + out.replace(/\n/g, '\r\n'));
 }
 
+// sonde OpenRouter en arrière-plan (résultat exposé par /api/health)
+let orProbeCache = { ok: null, checkedAt: 0 };
+async function refreshOrProbe() {
+  try { orProbeCache = { ...(await or.probe(6000)), checkedAt: Date.now() }; }
+  catch (e) { orProbeCache = { ok: false, error: or.describe(e), checkedAt: Date.now() }; }
+}
+setTimeout(refreshOrProbe, 1200);
+setInterval(refreshOrProbe, 5 * 60 * 1000).unref?.();
+
 function baseUrl(req) {
   const proto = req.headers['x-forwarded-proto'] || 'http';
   const host = req.headers['x-forwarded-host'] || req.headers.host || `localhost:${PORT}`;
@@ -215,7 +229,7 @@ async function api(req, res, url) {
   const { pathname } = url;
   const p = pathname.replace(/^\/api/, '');
 
-  if (p === '/health') return json(res, 200, { ok: true, name: 'JARVIS', version: '1.0.0', bridge: bridge.state.sessions.size > 0, uptime: process.uptime() });
+  if (p === '/health') return json(res, 200, { ok: true, name: 'JARVIS', version: '2.0.0', bridge: bridge.state.sessions.size > 0, uptime: process.uptime(), openrouter: orProbeCache });
 
   // ---- auth
   if (p === '/auth/register' && req.method === 'POST') {
@@ -257,19 +271,30 @@ async function api(req, res, url) {
   // ---- models & key test
   if (p === '/models') {
     const key = url.searchParams.get('key') || (user && openRouterKey(user.sub)) || '';
-    const list = await or.listModels(key);
+    const force = url.searchParams.get('force') === '1';
+    const r = await or.listModels(key, { force });
     return json(res, 200, {
-      models: list.map((m) => ({
-        id: m.id, name: m.name || m.id, free: !!m.free, vision: !!m.supportsVision,
-        context: m.context_length || 0, pricePrompt: or.priceOf(m) || 0,
-        description: (m.description || '').slice(0, 400),
-        modalities: (m.architecture && m.architecture.input_modalities) || ['text'],
-      })),
+      // la liste vient toujours de l'API OpenRouter ; rien n'est pré-écrit ici
+      models: r.models || [],
+      source: r.source || (r.offline ? 'offline' : 'live'),
+      offline: !!r.offline,
+      error: r.error || null,
+      count: (r.models || []).length,
       docs: 'https://openrouter.ai/docs/features/model-routing',
       pricing: 'https://openrouter.ai/models?order=pricing-low-to-high',
     });
   }
+  // le serveur peut-il joindre openrouter.ai ? (sinon le navigateur prend le relais)
+  if (p === '/or-probe') {
+    const r = await or.probe(Number(url.searchParams.get('timeout')) || 6000);
+    return json(res, 200, r);
+  }
   if (p === '/test-key' && req.method === 'POST') {
+    const b = await readBody(req);
+    const r = await or.testKey(b.key || openRouterKey(user && user.sub), b.model);
+    return json(res, 200, r);
+  }
+  if (p === '/models/test' && req.method === 'POST') {
     const b = await readBody(req);
     const r = await or.testKey(b.key || openRouterKey(user && user.sub), b.model);
     return json(res, 200, r);
@@ -277,6 +302,25 @@ async function api(req, res, url) {
   if (p === '/balance') {
     const key = url.searchParams.get('key') || (user && openRouterKey(user.sub)) || '';
     return json(res, 200, { balance: await or.balance(key) });
+  }
+
+  // ---- chat (réponse complète, sans streaming : studio image/vidéo)
+  if (p === '/chat-once' && req.method === 'POST') {
+    if (!user) return json(res, 401, { error: 'auth' });
+    const b = await readBody(req);
+    const key = keyOf(req, b) || openRouterKey(user.email);
+    if (!key) return json(res, 400, { error: 'no_key' });
+    const profile = b.profile || {};
+    const messages = [];
+    if (b.systemOverride) messages.push({ role: 'system', content: b.systemOverride });
+    else messages.push({ role: 'system', content: agent.buildSystemPrompt(profile, { mode: b.mode }) });
+    for (const m of b.messages || []) messages.push({ role: m.role, content: m.content });
+    try {
+      const out = await or.chatOnce(key, { model: b.model, messages, temperature: Number(b.temperature) || agent.EFFORTS[b.effort]?.temperature || 0.7, maxTokens: Number(b.maxTokens) || agent.EFFORTS[b.effort]?.maxTokens || 1500 });
+      return json(res, 200, { ok: true, content: out.content, reasoning: out.reasoning, usage: out.usage });
+    } catch (e) {
+      return json(res, e.offline ? 503 : 502, { ok: false, error: String(e.message || e), offline: !!e.offline, status: e.status });
+    }
   }
 
   // ---- chat
@@ -294,7 +338,11 @@ async function api(req, res, url) {
     try {
       const r = await or.generateImage(key, { model: b.model, prompt: b.prompt, size: b.size, quality: b.quality });
       return json(res, 200, r);
-    } catch (e) { return json(res, 500, { error: String(e.message || e) }); }
+    } catch (e) {
+      const msg = String(e.message || e);
+      const offline = /fetch failed|ENOTFOUND|ECONNRESET|ECONNREFUSED|SSL|abort/i.test(msg);
+      return json(res, offline ? 503 : 500, { error: msg, offline });
+    }
   }
 
   // ---- local bridge
@@ -418,7 +466,7 @@ async function api(req, res, url) {
       const txt = await up.text();
       res.writeHead(up.status, { 'Content-Type': up.headers.get('content-type') || 'application/json' });
       return res.end(txt);
-    } catch (e) { return json(res, 502, { error: String(e.message || e) }); }
+    } catch (e) { return json(res, 502, { error: 'OpenRouter injoignable depuis ce serveur : ' + or.describe(e) }); }
   }
   return json(res, 404, { error: 'not_found', path: p });
 }

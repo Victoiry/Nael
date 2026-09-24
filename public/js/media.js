@@ -188,10 +188,25 @@
       ? `Génère une illustration au format SVG (code SVG valide uniquement, sans texte autour) pour : "${prompt}". Style demandé : détaillé, harmonieux, palette cohérente, qualité ${q}. Contraintes : viewBox="0 0 ${ST.size.w} ${ST.size.h}", aucun script, aucune image externe, uniquement des formes/chemins/dégradés SVG.`
       : `Décris une animation courte (3 plans clés) pour une vidéo générée : "${prompt}". Réponds en 3 phrases maximum.`;
     try {
-      const r = await API.call('/api/chat', { method: 'POST', body: { key: S.key, model: window.Chat.activeModel(), messages: [{ role: 'user', content: ask }], effort: S.settings.ai.effort, profile: undefined } });
-      const text = r.content || '';
-      if (ST.kind === 'image') await loadSvg(text) || fillProcedural(prompt);
-      else { ST.scriptText = text; fillProcedural(prompt); toast(t('toast.done'), 'ok'); }
+      let text = '';
+      let imgUrl = null;
+      if (ST.kind === 'image') {
+        // 1) vrai modèle d'image OpenRouter (renvoie une image)
+        const ir = await J.ORapi.image({ key: S.key, model: S.settings.ai.imageModel || undefined, prompt: `${prompt} — qualité ${q}, format ${ST.size.w}x${ST.size.h}`, size: ST.size.w === ST.size.h ? '1:1' : ST.size.w > ST.size.h ? '16:9' : '9:16' });
+        if (ir.ok && ir.images && ir.images.length) imgUrl = ir.images[0];
+        else if (ir.reason && ir.reason !== 'modele_inconnu') toast(t('or.err.' + ir.reason), 'err');
+      }
+      if (imgUrl) {
+        const ok = await loadImageUrl(imgUrl);
+        if (!ok) fillProcedural(prompt);
+      } else {
+        // 2) sinon : image vectorielle écrite par le modèle texte (mêmes canaux)
+        const r = await J.ORapi.chatOnce({ key: S.key, model: window.Chat.activeModel(), messages: [{ role: 'user', content: ask }], effort: S.settings.ai.effort });
+        text = r.content || '';
+        if (!r.ok) toast(t('or.err.' + (r.reason || 'inconnu')), 'err');
+        if (ST.kind === 'image') { if (!(await loadSvg(text))) fillProcedural(prompt); }
+        else { ST.scriptText = text; fillProcedural(prompt); toast(t('toast.done'), 'ok'); }
+      }
     } catch {
       fillProcedural(prompt);
       toast(t('img.fallback'), 'ok');
@@ -199,6 +214,17 @@
     btnEl.disabled = false;
     btnEl.innerHTML = old;
     redraw(true);
+  }
+
+  async function loadImageUrl(url) {
+    try {
+      const img = await new Promise((res, rej) => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = rej; i.src = url; });
+      const w = img.naturalWidth || ST.size.w, h = img.naturalHeight || ST.size.h;
+      initCanvases(w, h);
+      ctx2d(ST.src)?.drawImage(img, 0, 0, w, h);
+      toast(t('toast.done'), 'ok');
+      return true;
+    } catch { return false; }
   }
 
   async function loadSvg(text) {

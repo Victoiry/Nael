@@ -58,7 +58,7 @@
     liveBtn.addEventListener('click', () => toggleLive());
 
     const sendBtn = el('button', { class: 'ibtn tip', id: 'send-btn', 'data-tip': t('msg.send'), style: 'color:var(--accent)' }, icon('send', 19));
-    sendBtn.addEventListener('click', () => { if (S.abort) API.stop(); else send(); });
+    sendBtn.addEventListener('click', () => { if (S.abort || (window.OR && window.OR.state.abort)) J.ORapi.stop(); else send(); });
 
     box.append(el('div', { class: 'tools' }, plus), ta, el('div', { class: 'right' }, effortBtn, voiceBtn, liveBtn, sendBtn));
     const hint = el('div', { class: 'composer-hint' },
@@ -136,28 +136,60 @@
 
   async function loadModels(force) {
     if (MODELS.loaded && !force) return MODELS.list;
-    const r = await API.call('/api/models' + (S.key ? '?key=' + encodeURIComponent(S.key) : ''));
-    MODELS.list = r.models || [];
-    MODELS.loaded = true;
-    // par défaut on reste sur un modèle gratuit (0 € garanti)
-    if (!S.settings.ai.model) {
-      const free = firstFree();
-      if (free) { S.settings.ai.model = free; S.model = free; save('settings'); }
-    }
     const btn = document.getElementById('model-btn');
     if (btn && !btn.dataset.bound) {
       btn.dataset.bound = '1';
       btn.addEventListener('click', () => openModelMenu(btn));
     }
+    if (btn) { btn.innerHTML = ''; btn.append(icon('loader', 16), el('span', { class: 'nm', text: t('or.loading') })); }
+    const r = await J.ORapi.models(S.key, { force });
+    if (r.ok) {
+      MODELS.list = r.models;
+      MODELS.loaded = true;
+      MODELS.via = r.via;
+      // rien n'est pré-choisi : si aucun modèle n'est encore défini, on prend le premier gratuit renvoyé par l'API
+      if (!S.settings.ai.model) {
+        const free = firstFree();
+        if (free) { S.settings.ai.model = free; S.model = free; save('settings'); }
+      }
+      if (!MODELS.list.some((m) => m.id === S.settings.ai.model) && MODELS.list.length) {
+        const free = firstFree();
+        if (free) { S.settings.ai.model = free; S.model = free; save('settings'); }
+      }
+    } else {
+      MODELS.list = [];
+      MODELS.loaded = false;
+      MODELS.error = r.reason || 'inconnu';
+      MODELS.detail = r.error || '';
+    }
+    if (!r.ok) toast(t('or.err.' + (r.reason || 'inconnu')), 'err');
+    else if (r.via === 'direct') toast(t('or.channel.direct'));
     paintModelButton();
     return MODELS.list;
+  }
+
+  /** Bandeau d'erreur quand OpenRouter est injoignable + bouton Réessayer. */
+  function modelsBanner() {
+    const retry = el('button', { class: 'btn sm primary' }, icon('refresh', 15), t('or.retry'));
+    retry.addEventListener('click', async () => { await loadModels(true); renderMessages(); });
+    return el('div', { class: 'notice danger', style: 'max-width:680px;margin:2rem auto' },
+      el('b', { text: t('or.offline.title') }),
+      el('div', { class: 'tiny', text: t('or.err.' + (MODELS.error || 'inconnu')) }),
+      el('div', { class: 'tiny muted', text: MODELS.detail || '' }),
+      el('div', { class: 'row wrap', style: 'margin-top:.5rem' }, retry,
+        el('a', { class: 'btn sm', href: 'https://openrouter.ai/keys', target: '_blank', rel: 'noopener', text: t('or.keys') })));
   }
   function paintModelButton() {
     const btn = document.getElementById('model-btn');
     if (!btn) return;
+    btn.innerHTML = '';
+    if (!MODELS.list.length) {
+      btn.append(icon('warning', 16), el('span', { class: 'nm', text: t('or.channel.none') }), icon('chevron', 14));
+      btn.classList.add('chip');
+      return;
+    }
     const id = activeModel();
     const info = modelInfo(id);
-    btn.innerHTML = '';
     btn.append(icon(info && info.vision ? 'eye' : 'cpu', 16),
       el('span', { class: 'nm', text: info ? info.name : id }),
       el('span', { class: 'chip ' + (info && info.free ? 'free' : 'paid'), text: info ? (info.free ? 'FREE' : 'PAID') : '—' }),
@@ -165,6 +197,13 @@
   }
 
   function openModelMenu(anchor) {
+    if (!MODELS.list.length) {
+      return menuAt(anchor, [
+        { label: t('or.offline.title'), sub: t('or.err.' + (MODELS.error || 'inconnu')), icon: 'warning',
+          onClick: async () => { await loadModels(true); renderMessages(); } },
+        { label: t('or.keys'), icon: 'link', onClick: () => window.open('https://openrouter.ai/keys', '_blank') },
+      ], 320);
+    }
     const items = MODELS.list.slice(0, 80).map((m) => ({
       label: m.name, sub: m.id + (m.context ? ' · ' + (m.context / 1000).toFixed(0) + 'k' : '') + (m.vision ? ' · ' + t('model.vision') : ' · ' + t('model.novision')),
       tag: m.free ? 'FREE' : 'PAID', tagClass: m.free ? 'free' : 'paid', active: m.id === activeModel(),
@@ -340,6 +379,7 @@
     box.classList.remove('grid-mode');
     box.innerHTML = '';
     const p = profile();
+    if (!MODELS.list.length) box.appendChild(modelsBanner());
     box.appendChild(el('div', { class: 'welcome' },
       el('div', { class: 'mark' }),
       el('h2', { text: p.aiName ? p.aiName + ' — ' + t('land.feat1') : t('land.hero') }),
@@ -419,14 +459,16 @@
     document.getElementById('send-btn')?.classList.add('rec');
 
     const messages = conv.messages.filter((m) => m !== aiMsg).map((m) => ({ role: m.role, content: m.content }));
+    let announced = false;
     try {
-      await API.stream('/api/chat', {
+      const res = await J.ORapi.chat({
         key: S.key, model,
         messages: S.private ? messages.slice(-4) : messages,
         effort: S.settings.ai.effort, mode: S.mode, maxTokens: S.settings.ai.maxTokens,
         profile: profile(), sessionId: S.bridge.sessionId, temperature: S.settings.ai.temperature,
         visionWarning: S.settings.ai.visionWarn && info && !info.vision,
       }, {
+        channel: (c) => { if (c === 'direct' && !announced) { announced = true; toast(t('or.channel.direct')); } },
         delta: (d) => { aiMsg.content += d.text; live.innerHTML = md(aiMsg.content); if (S.settings.ai.autoScroll) box.scrollTop = box.scrollHeight; },
         reasoning: (d) => {
           aiMsg.reasoning += d.text;
@@ -446,9 +488,17 @@
         },
         screen: (d) => { if (d.image) { aiMsg.image = d.image; bubble.appendChild(el('img', { src: d.image, class: 'screen-shot' })); } },
         approval: (d) => window.App.showApproval(d),
-        error: (d) => { aiMsg.content += '\n\n' + d.message; live.innerHTML = md(aiMsg.content); },
+        error: (d) => { /* l'erreur finale est traitée après le retour du canal */ },
         done: () => {},
       });
+      if (!res.ok && !res.aborted) {
+        aiMsg.content += (aiMsg.content ? '\n\n' : '') + '**' + t('or.offline.title') + '** — ' + t('or.err.' + (res.reason || 'inconnu'))
+          + (res.error ? '\n\n`' + String(res.error).slice(0, 300) + '`' : '');
+        live.innerHTML = md(aiMsg.content);
+        MODELS.error = res.reason || MODELS.error;
+        MODELS.detail = res.error || MODELS.detail;
+        paintModelButton();
+      }
     } catch (e) {
       if (String(e.name) !== 'AbortError') { aiMsg.content += '\n\n' + String(e.message || e); live.innerHTML = md(aiMsg.content); }
     }
@@ -595,11 +645,12 @@
       body.appendChild(out);
       let acc = '';
       try {
-        await API.stream('/api/chat', { key: S.key, model: box.dataset.model, messages: [{ role: 'user', content: q }], effort: S.settings.ai.effort, profile: profile() }, {
+        const res = await J.ORapi.chat({ key: S.key, model: box.dataset.model, messages: [{ role: 'user', content: q }], effort: S.settings.ai.effort, profile: profile() }, {
           delta: (d) => { acc += d.text; out.innerHTML = md(acc); },
           error: (d) => { out.innerHTML += '<br>' + esc(d.message); },
           done: () => {},
         });
+        if (!res.ok && !res.aborted) out.innerHTML = esc(t('or.err.' + (res.reason || 'inconnu'))) + (res.error ? '<br><span class="muted tiny">' + esc(String(res.error).slice(0, 200)) + '</span>' : '');
       } catch (e) { out.innerHTML = esc(String(e.message || e)); }
       body.scrollTop = body.scrollHeight;
     };

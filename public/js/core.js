@@ -288,6 +288,164 @@
     stop() { try { S.abort?.abort(); } catch {} S.abort = null; },
   };
 
+  // ---------------------------------------------------------------- OpenRouter unifié
+  /* Deux canaux possibles :
+     - « server » : le serveur Node joint openrouter.ai (déploiement normal) ;
+     - « direct » : le serveur est bloqué → le navigateur parle à OpenRouter.
+     La liste des modèles vient TOUJOURS de l'API (aucune liste pré-écrite). */
+  const ORapi = {
+    channel: 'unknown',
+    lastError: null,
+    listeners: [],
+
+    onChannel(fn) { this.listeners.push(fn); fn(this.channel); },
+    setChannel(c) {
+      if (this.channel === c) return c;
+      this.channel = c;
+      this.listeners.forEach((fn) => { try { fn(c); } catch {} });
+      return c;
+    },
+
+    /** Choisit le canal : serveur d'abord, navigateur ensuite. */
+    async detect(force) {
+      if (!force && this.channel !== 'unknown') return this.channel;
+      let probe = {};
+      try { probe = await API.call('/api/or-probe'); } catch {}
+      if (probe && probe.ok) return this.setChannel('server');
+      const direct = window.OR ? await window.OR.probeDirect() : { ok: false };
+      if (direct.ok) return this.setChannel('direct');
+      this.lastError = (probe && probe.error) || direct.error || 'reseau';
+      return this.setChannel('none');
+    },
+
+    /** Liste des modèles, canal adapté + bascule automatique. */
+    async models(key, { force } = {}) {
+      await this.detect();
+      const tryServer = async () => {
+        const r = await API.call('/api/models?force=' + (force ? 1 : 0) + (key ? '&key=' + encodeURIComponent(key) : ''));
+        if (r && Array.isArray(r.models) && r.models.length) return { ok: true, models: r.models, source: r.source || 'live', via: 'server' };
+        return { ok: false, via: 'server', error: r && r.error, reason: (r && r.offline) ? 'reseau_ou_cors' : 'liste_vide' };
+      };
+      const tryDirect = async () => {
+        if (!window.OR) return { ok: false, reason: 'inconnu' };
+        const r = await window.OR.models({ key });
+        if (r.ok) { this.setChannel('direct'); return { ok: true, models: r.models, via: 'direct' }; }
+        return { ok: false, via: 'direct', error: r.error, reason: r.reason };
+      };
+      let out = this.channel === 'direct' ? await tryDirect() : await tryServer();
+      if (!out.ok) {
+        out = this.channel === 'direct' ? await tryServer() : await tryDirect();
+      }
+      if (!out.ok) {
+        this.lastError = out.reason || 'reseau';
+        if (this.channel !== 'none') this.setChannel('none');
+      } else if (out.via === 'direct') this.setChannel('direct');
+      return out;
+    },
+
+    /** Test de la clé : serveur d'abord, puis navigateur (et inversement). */
+    async testKey(key, model) {
+      await this.detect();
+      const tryServer = async () => {
+        const r = await API.call('/api/test-key', { method: 'POST', body: { key, model } });
+        const ok = !!r && r.ok === true;
+        const network = !!r && r.status === 0;
+        const detail = (r && r.detail) || '';
+        if (ok) return { ok: true, status: r.status, latency: r.latency, model: r.model || model, via: 'server' };
+        // 401/402/429 : la réponse vient bien d'OpenRouter → inutile de basculer
+        if (!network && r && r.status) return { ok: false, status: r.status, latency: r.latency, detail, reason: (r.status === 401 ? 'cle_invalide' : r.status === 402 ? 'credit' : r.status === 429 ? 'debit' : 'openrouter_erreur'), via: 'server' };
+        return { ok: false, status: 0, detail, reason: 'reseau_ou_cors', via: 'server' };
+      };
+      const tryDirect = async () => {
+        if (!window.OR) return { ok: false, reason: 'inconnu', via: 'direct' };
+        const r = await window.OR.testKey(key, model);
+        if (r.ok) { this.setChannel('direct'); return { ...r, via: 'direct' }; }
+        return { ...r, via: 'direct', reason: r.reason || 'inconnu' };
+      };
+      let out = this.channel === 'direct' ? await tryDirect() : await tryServer();
+      if (!out.ok && (out.status === 0 || !out.status)) out = this.channel === 'direct' ? await tryServer() : await tryDirect();
+      if (out.ok && out.via === 'direct') this.setChannel('direct');
+      return out;
+    },
+
+    /** Chat : streaming via le canal disponible, bascule transparente sur l'autre. */
+    async chat(payload, handlers = {}) {
+      await this.detect();
+      const viaDirect = async () => {
+        if (!window.OR) return { ok: false, reason: 'inconnu' };
+        const r = await window.OR.stream(payload, handlers);
+        if (r.ok) { this.setChannel('direct'); handlers.channel && handlers.channel('direct'); }
+        return r;
+      };
+      const viaServer = () => new Promise((resolve) => {
+        let got = false, offline = false, failed = null;
+        API.stream('/api/chat', payload, Object.assign({}, handlers, {
+          delta: (d) => { got = true; handlers.delta && handlers.delta(d); },
+          reasoning: (d) => { got = true; handlers.reasoning && handlers.reasoning(d); },
+          offline: (d) => { offline = true; failed = d; },
+          error: (d) => { failed = d; },
+          done: () => { handlers.done && handlers.done({}); },
+        })).then(() => {
+          if (offline || (failed && !got && failed.status === undefined)) resolve({ ok: false, reason: 'reseau_ou_cors', error: (failed && failed.message) || '', offline });
+          else if (failed) { handlers.error && handlers.error(failed); resolve({ ok: false, reason: 'openrouter_erreur', error: failed.message }); }
+          else { if (!offline) handlers.channel && handlers.channel('server'); resolve({ ok: true, got }); }
+        }).catch((e) => resolve({ ok: false, reason: 'reseau_ou_cors', error: String(e && e.message || e) }));
+      });
+      let out = this.channel === 'direct' ? await viaDirect() : await viaServer();
+      if (!out.ok && !out.aborted && (this.channel === 'direct' ? false : out.reason === 'reseau_ou_cors')) {
+        const alt = this.channel === 'direct' ? await viaServer() : await viaDirect();
+        if (alt.ok) { this.setChannel(this.channel === 'direct' ? 'server' : 'direct'); return alt; }
+        out = alt.ok ? alt : out;
+      }
+      if (!out.ok && !out.aborted) {
+        handlers.error && handlers.error({ message: out.error || out.reason, reason: out.reason });
+      }
+      return out;
+    },
+
+    /** Réponse complète (studio image/vidéo). */
+    async chatOnce(payload) {
+      await this.detect();
+      const viaServer = async () => {
+        const r = await API.call('/api/chat-once', { method: 'POST', body: payload });
+        if (r && r.ok) return r;
+        return { ok: false, reason: r && r.status ? 'openrouter_erreur' : 'reseau_ou_cors', error: (r && (r.error || r.raw)) || '' };
+      };
+      const viaDirect = async () => {
+        if (!window.OR) return { ok: false, reason: 'inconnu' };
+        const r = await window.OR.chatOnce(payload);
+        if (r.ok) this.setChannel('direct');
+        return r;
+      };
+      let out = this.channel === 'direct' ? await viaDirect() : await viaServer();
+      if (!out.ok) out = this.channel === 'direct' ? await viaServer() : await viaDirect();
+      return out;
+    },
+
+    async image(payload) {
+      await this.detect();
+      const viaServer = async () => {
+        const r = await API.call('/api/image', { method: 'POST', body: payload });
+        if (r && r.images && r.images.length) return { ok: true, ...r };
+        return { ok: false, reason: r && r.offline ? 'reseau_ou_cors' : (r && r.error) ? 'openrouter_erreur' : 'liste_vide', error: r && r.error };
+      };
+      const viaDirect = async () => {
+        if (!window.OR) return { ok: false, reason: 'inconnu' };
+        const r = await window.OR.image(payload);
+        if (r.ok) this.setChannel('direct');
+        return r;
+      };
+      let out = this.channel === 'direct' ? await viaDirect() : await viaServer();
+      if (!out.ok || !out.images || !out.images.length) {
+        const alt = this.channel === 'direct' ? await viaServer() : await viaDirect();
+        if (alt.ok && alt.images && alt.images.length) return alt;
+        out = (alt.ok && alt.images && alt.images.length) ? alt : out;
+      }
+      return out;
+    },
+    stop() { try { window.OR && window.OR.stop(); } catch {} API.stop(); },
+  };
+
   // ---------------------------------------------------------------- markdown
   function md(src) {
     if (!src) return '';
@@ -410,13 +568,35 @@
     loop();
   }
 
-  const copy = (s) => { try { navigator.clipboard.writeText(String(s)); } catch {} };
+  /** Copie robuste : presse-papiers moderne, sinon repli (et jamais d'erreur visible). */
+  function fallbackCopy(str) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = str;
+      ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;top:-1000px;left:-1000px;opacity:0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand ? document.execCommand('copy') : false;
+      ta.remove();
+      return !!ok;
+    } catch { return false; }
+  }
+  function copy(s) {
+    const str = String(s == null ? '' : s);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(str).then(() => true).catch(() => fallbackCopy(str));
+      }
+    } catch {}
+    return Promise.resolve(fallbackCopy(str));
+  }
 
   window.LANGS = LANGS;
   window.J = {
     S, t, el, esc, save, toast, modal, countdownModal, API, md, applyTheme, applyI18n, setLang, LS,
     DEFAULTS, DEFAULT_PROFILE, LANGS, VOICE_LANGS, ico, icon, speak, stopSpeak, createSTT,
-    cloudPull, cloudPush, copy, startBg,
+    cloudPull, cloudPush, copy, startBg, ORapi,
     get state() { return S; },
   };
   document.addEventListener('DOMContentLoaded', () => { document.documentElement.lang = S.settings.lang; applyI18n(document); startBg(); });
