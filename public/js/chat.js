@@ -329,7 +329,7 @@
     const conv = currentConv();
     box.innerHTML = '';
     if (!conv.messages.length) {
-      box.appendChild(el('div', { class: 'center', style: 'margin-top:8vh;opacity:.9' },
+      box.appendChild(el('div', { class: 'center', style: 'padding:clamp(6px, 5vh, 56px) 0 8px;opacity:.95' },
         el('div', { style: 'font-size:3rem', text: profile().avatar || '🤖' }),
         el('h2', { text: t('land.hero') }),
         el('p', { class: 'muted', text: profile().aiName ? profile().aiName + ' — ' + t('land.sub') : t('land.sub') })));
@@ -537,7 +537,6 @@
     document.getElementById('view-chat').classList.remove('hidden');
     document.getElementById('studio').classList.add('hidden');
     document.getElementById('composer').classList.toggle('hidden', tab === 'multitask' || tab === 'compare');
-    document.getElementById('mode-chip').textContent = (S.mode === 'agent' ? '🤖 ' : '💬 ') + t('mode.' + (S.mode === 'agent' ? 'agent' : 'chat'));
     if (tab === 'multitask') { loadModels().then(() => renderMultitask(host)); return; }
     if (tab === 'compare') { loadModels().then(() => renderCompare(host)); return; }
     renderMessages();

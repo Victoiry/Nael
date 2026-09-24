@@ -111,7 +111,7 @@
       slider('set.voicePitch', 0.5, 2, 0.05, p.voicePitch || 1, (v) => updateProfile({ voicePitch: v })),
       el('button', { class: 'btn sm', text: '▶ ' + t('set.voice'), onclick: () => window.J.speak(t('land.hero')) }));
     box.appendChild(section('set.voice', voiceBox));
-    box.appendChild(section('set.personalize', fields));
+    box.appendChild(section('set.identity', fields));
     return box;
   }
 

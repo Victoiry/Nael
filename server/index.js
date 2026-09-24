@@ -443,11 +443,11 @@ function serveStatic(req, res, url) {
     if (err) {
       fs.readFile(path.join(PUBLIC, 'index.html'), (e2, d2) => {
         if (e2) { res.writeHead(404); return res.end('not found'); }
-        res.writeHead(200, { 'Content-Type': MIME['.html'] }); res.end(d2);
+        res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store, must-revalidate' }); res.end(d2);
       });
       return;
     }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(full)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(full)] || 'application/octet-stream', 'Cache-Control': 'no-store, must-revalidate' });
     res.end(data);
   });
 }

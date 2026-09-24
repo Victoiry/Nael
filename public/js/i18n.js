@@ -307,6 +307,7 @@ window.I18N = {
     "live.nomic": "Micro refusé",
     "live.needsvision": "Ce modèle ne gère pas les images : le Live enverra seulement le texte.",
     "voice.unsupported": "La reconnaissance vocale n'est pas disponible dans ce navigateur (essayez Chrome ou Edge).",
+    "set.identity": "Identité de l'IA",
 "panel.resize": "Glissez pour redimensionner le panneau"
   },
   en: {
@@ -616,6 +617,7 @@ window.I18N = {
     "live.nomic": "Microphone denied",
     "live.needsvision": "This model does not handle images: Live will send text only.",
     "voice.unsupported": "Speech recognition is not available in this browser (try Chrome or Edge).",
+    "set.identity": "AI identity",
 "panel.resize": "Drag to resize the panel"
   },
   es: {
@@ -925,6 +927,7 @@ window.I18N = {
     "live.nomic": "Micrófono denegado",
     "live.needsvision": "Este modelo no maneja imágenes: Live solo enviará texto.",
     "voice.unsupported": "El reconocimiento de voz no está disponible en este navegador (prueba Chrome o Edge).",
+    "set.identity": "Identidad de la IA",
 "panel.resize": "Arrastra para cambiar el tamaño del panel"
   },
   it: {
@@ -1234,6 +1237,7 @@ window.I18N = {
     "live.nomic": "Microfono negato",
     "live.needsvision": "Questo modello non gestisce le immagini: Live invierà solo testo.",
     "voice.unsupported": "Il riconoscimento vocale non è disponibile in questo browser (prova Chrome o Edge).",
+    "set.identity": "Identità dell'IA",
 "panel.resize": "Trascina per ridimensionare il pannello"
   }
 };

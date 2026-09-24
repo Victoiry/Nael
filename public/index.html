@@ -13,25 +13,30 @@
 <body>
 
 <div id="bg"><div class="layer"></div><canvas></canvas><div class="grid"></div></div>
+<div id="errbar"><span id="errbar-msg"></span><span class="spacer"></span><button class="btn sm" onclick="this.parentNode.classList.remove('on')">✕</button></div>
 
 <!-- ================= LANDING ================= -->
 <div id="landing">
   <div class="orb"></div>
   <div class="brand" data-i18n="land.brand">JARVIS</div>
   <h1 data-i18n="land.hero">Ayez l'IA que tout le monde souhaiterait avoir : JARVIS</h1>
-  <p class="sub" data-i18n="land.sub"></p>
+  <p class="sub" data-i18n="land.sub">Votre agent personnel : il parle, écoute, voit, code, crée des images et agit sur votre ordinateur.</p>
   <div class="feats">
-    <span class="chip">🎙 <span data-i18n="land.feat1"></span></span>
-    <span class="chip">💻 <span data-i18n="land.feat2"></span></span>
-    <span class="chip">🎨 <span data-i18n="land.feat3"></span></span>
-    <span class="chip">🌍 <span data-i18n="land.feat4"></span></span>
+    <span class="chip">🎙 <span data-i18n="land.feat1">Voix temps réel</span></span>
+    <span class="chip">💻 <span data-i18n="land.feat2">Agent sur votre PC</span></span>
+    <span class="chip">🎨 <span data-i18n="land.feat3">100 % personnalisable</span></span>
+    <span class="chip">🌍 <span data-i18n="land.feat4">4 langues</span></span>
   </div>
-  <div class="cta">
-    <button class="btn primary" id="btn-start" data-i18n="land.start"></button>
-    <button class="btn" id="btn-login" data-i18n="land.login"></button>
+  <p class="tiny muted" id="land-note" data-i18n="land.noaccount">Sans compte, en 30 secondes</p>
+  <p class="tiny muted" data-i18n="land.legal">En continuant, vous acceptez d'utiliser l'IA de façon responsable.</p>
+</div>
+
+<!-- barre d'action toujours visible -->
+<div id="cta-bar">
+  <div class="cta" id="cta-inline">
+    <button class="btn primary" id="btn-start" data-i18n="land.start">Commencer</button>
+    <button class="btn" id="btn-login" data-i18n="land.login">J'ai déjà un compte</button>
   </div>
-  <p class="tiny muted" id="land-note" data-i18n="land.noaccount"></p>
-  <p class="tiny muted" data-i18n="land.legal"></p>
 </div>
 
 <!-- ================= WORKSPACE ================= -->
@@ -42,13 +47,13 @@
     </button>
     <span class="brand">JARVIS</span>
     <nav class="main-tabs" id="main-tabs">
-      <button class="tab" data-panel="personalize" data-i18n="nav.personalize"></button>
-      <button class="tab" data-panel="global" data-i18n="nav.global"></button>
-      <button class="tab" data-panel="ai" data-i18n="nav.ai"></button>
-      <button class="tab" data-panel="history" data-i18n="nav.history"></button>
-      <button class="tab" data-panel="memory" data-i18n="nav.memory"></button>
-      <button class="tab" data-panel="console" data-i18n="nav.console"></button>
-      <button class="tab" data-panel="bridge" data-i18n="nav.bridge"></button>
+      <button class="tab" data-panel="personalize" title="Personnaliser"><span class="tab-ico">🎨</span><span class="tab-txt" data-i18n="nav.personalize">Personnaliser</span></button>
+      <button class="tab" data-panel="global" title="Paramètres globaux"><span class="tab-ico">🌐</span><span class="tab-txt" data-i18n="nav.global">Paramètres globaux</span></button>
+      <button class="tab" data-panel="ai" title="Paramètres IA"><span class="tab-ico">🧠</span><span class="tab-txt" data-i18n="nav.ai">Paramètres IA</span></button>
+      <button class="tab" data-panel="history" title="Historique"><span class="tab-ico">🕘</span><span class="tab-txt" data-i18n="nav.history">Historique</span></button>
+      <button class="tab" data-panel="memory" title="Mémoire"><span class="tab-ico">💾</span><span class="tab-txt" data-i18n="nav.memory">Mémoire</span></button>
+      <button class="tab" data-panel="console" title="Console agent"><span class="tab-ico">🖥️</span><span class="tab-txt" data-i18n="nav.console">Console agent</span></button>
+      <button class="tab" data-panel="bridge" title="Pont local"><span class="tab-ico">🔌</span><span class="tab-txt" data-i18n="nav.bridge">Pont local</span></button>
     </nav>
     <select id="lang-select" class="select-inline" title="Langue / Language"></select>
     <span class="chip" id="bridge-chip">●</span>
@@ -59,11 +64,11 @@
 
   <div class="main" id="main-grid">
     <aside id="sidebar"><div class="inner">
-      <button class="btn primary block" id="btn-new" data-i18n="nav.new"></button>
-      <input type="text" id="conv-search" data-i18n-ph="nav.search">
+      <button class="btn primary block" id="btn-new" data-i18n="nav.new">Nouvelle discussion</button>
+      <input type="text" id="conv-search" data-i18n-ph="nav.search" placeholder="Rechercher…">
       <div id="conv-list"></div>
       <div id="cbridge" class="panel-sec tiny">
-        <h4 data-i18n="bridge.title"></h4>
+        <h4 data-i18n="bridge.title">Pont local</h4>
         <div id="bridge-mini" class="muted">…</div>
       </div>
       <div class="row" style="padding-top:.4rem;border-top:1px solid var(--border)">
@@ -72,7 +77,11 @@
           <span id="me-mail" class="tiny muted"></span>
         </div>
         <span class="spacer"></span>
-        <button class="btn sm" id="btn-auth-top" data-i18n="auth.login"></button>
+        <button class="btn sm" id="btn-auth-top" data-i18n="auth.login">Connexion</button>
+      </div>
+      <div class="tiny muted center" style="padding-top:.35rem;line-height:1.4">
+        <span data-i18n="nav.creator">Créateur : Nael Hamouche</span><br>
+        <a href="mailto:nael.hamouche@gmail.com">nael.hamouche@gmail.com</a>
       </div>
     </div></aside>
 
@@ -80,14 +89,12 @@
       <!-- chat view -->
       <div id="view-chat" class="col" style="flex:1;min-height:0">
         <div class="row wrap" id="chat-tabs" style="padding:.5rem .9rem 0;gap:.3rem">
-          <button class="tab active" data-tab="classic" data-i18n="tab.classic"></button>
-          <button class="tab" data-tab="multitask" data-i18n="tab.multitask"></button>
-          <button class="tab" data-tab="compare" data-i18n="tab.compare"></button>
-          <button class="tab" data-tab="code" data-i18n="tab.code"></button>
-          <button class="tab priv" data-tab="private" data-i18n="tab.private"></button>
-          <button class="tab" data-tab="offline" data-i18n="tab.offline"></button>
-          <span class="spacer"></span>
-          <span class="chip" id="mode-chip"></span>
+          <button class="tab active" data-tab="classic" data-i18n="tab.classic">Classique</button>
+          <button class="tab" data-tab="multitask" data-i18n="tab.multitask">Multitâche</button>
+          <button class="tab" data-tab="compare" data-i18n="tab.compare">Comparaison</button>
+          <button class="tab" data-tab="code" data-i18n="tab.code">Code</button>
+          <button class="tab priv" data-tab="private" data-i18n="tab.private">Privé</button>
+          <button class="tab" data-tab="offline" data-i18n="tab.offline">Hors connexion</button>
         </div>
         <div id="chat-scroll"></div>
         <div id="composer"></div>
@@ -96,7 +103,7 @@
       <div id="studio" class="hidden"></div>
     </section>
 
-    <div class="resizer" id="resizer" data-i18n-title="panel.resize"></div>
+    <div class="resizer" id="resizer" data-i18n-title="panel.resize" title="Glissez pour redimensionner le panneau"></div>
     <aside id="panel"><div class="inner" id="panel-body"></div></aside>
   </div>
 </div>
@@ -107,17 +114,20 @@
   <div class="wave" id="wave"></div>
   <div class="hud-text" id="hud-text"></div>
   <div class="row">
-    <button class="btn" id="hud-stop" data-i18n="msg.stop"></button>
-    <button class="btn primary" id="hud-send" data-i18n="msg.send"></button>
+    <button class="btn" id="hud-stop" data-i18n="msg.stop">Arrêter</button>
+    <button class="btn primary" id="hud-send" data-i18n="msg.send">Envoyer</button>
   </div>
   <div id="hud-extra" style="max-width:80vw"></div>
 </div>
 
 <div id="toasts"></div>
 
-<footer class="credit">
-  <span data-i18n="nav.creator"></span> — <a href="mailto:nael.hamouche@gmail.com">nael.hamouche@gmail.com</a>
+<footer class="credit" id="credit">
+  <span class="ver">v1.1</span> · <span data-i18n="nav.creator">Créateur : Nael Hamouche</span> — <a href="mailto:nael.hamouche@gmail.com">nael.hamouche@gmail.com</a>
 </footer>
+
+<noscript><div style="position:fixed;inset:auto 0 0 0;background:#2a0d16;color:#ffd7de;padding:.8rem;text-align:center;z-index:99">
+Activez JavaScript pour utiliser JARVIS.</div></noscript>
 
 <script src="/js/i18n.js"></script>
 <script src="/js/core.js"></script>

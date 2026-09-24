@@ -6,13 +6,27 @@
   let verifyTimer = null;
 
   // =========================================================== boot
+  function showError(msg) {
+    const bar = document.getElementById('errbar');
+    const txt = document.getElementById('errbar-msg');
+    if (!bar || !txt) return;
+    txt.textContent = '⚠ ' + msg;
+    bar.classList.add('on');
+  }
+  window.addEventListener('error', (e) => showError(e.message || 'script error'));
+  window.addEventListener('unhandledrejection', (e) => showError((e.reason && (e.reason.message || e.reason)) || 'promise error'));
+
   function boot() {
     applyTheme(); applyI18n(document);
     if (S.settings.ai.privateDefault) S.private = true;
     const sel = document.getElementById('lang-select');
-    window.LANGS.forEach((l) => sel.appendChild(el('option', { value: l.code, text: l.flag + ' ' + l.label, selected: l.code === S.settings.lang })));
+    window.LANGS.forEach((l) => sel.appendChild(el('option', { value: l.code, text: l.flag + ' ' + l.code.toUpperCase(), title: l.label, selected: l.code === S.settings.lang })));
+    sel.title = window.LANGS.map((l) => l.label).join(' / ');
     sel.addEventListener('change', () => { setLang(sel.value); buildModeSwitch(); window.Chat.buildComposer(); window.Settings.render(window.Settings.current); });
 
+    document.getElementById('credit')?.classList.remove('hidden');
+    const ctaBar = document.getElementById('cta-bar');
+    if (ctaBar) ctaBar.style.display = 'flex';
     document.getElementById('btn-start').addEventListener('click', () => start(false));
     document.getElementById('btn-login').addEventListener('click', () => openAuth());
     document.getElementById('btn-auth-top').addEventListener('click', () => (S.auth ? logout() : openAuth()));
@@ -30,6 +44,8 @@
 
     resizer();
     pollBridge();
+    fitTabs();
+    addEventListener('resize', fitTabs);
 
     // session « sans compte » silencieuse : nécessaire pour le pont local et les .bat
     if (!S.auth) {
@@ -43,6 +59,20 @@
     if (S.auth) { API.call('/api/auth/me').then((r) => { S.user = r.user; paintUser(); }); }
     window.Chat.loadModels().then(() => { if (MODELOK()) window.Chat.buildComposer(); });
     function MODELOK() { return true; }
+  }
+
+  // onglets : texte si la place le permet, sinon icônes seules
+  function fitTabs() {
+    const top = document.getElementById('topbar');
+    const tabs = document.getElementById('main-tabs');
+    if (!top || !tabs || top.offsetParent === null) return;   // barre masquée : rien à mesurer
+    top.classList.remove('compact', 'tight');
+    const others = [...top.children].filter((e) => e !== tabs);
+    const used = others.reduce((n, e) => n + e.getBoundingClientRect().width, 0);
+    const need = [...tabs.children].reduce((n, b) => n + b.getBoundingClientRect().width, 0) + 18;
+    const avail = top.clientWidth - used;
+    if (need > avail) top.classList.add('compact');            // icônes seules
+    if (avail < 600) top.classList.add('tight');               // tout en icônes
   }
 
   // =========================================================== start / onboarding
@@ -257,11 +287,19 @@
   // =========================================================== app
   function enterApp() {
     document.getElementById('landing').classList.add('hidden');
+    const bar = document.getElementById('cta-bar');
+    if (bar) bar.style.display = 'none';
+    document.getElementById('credit')?.classList.add('hidden');
     document.getElementById('workspace').classList.remove('hidden');
     buildModeSwitch();
     window.Chat.loadModels().then(() => { window.Chat.buildComposer(); window.Chat.setTab(S.tab || 'classic'); });
     renderConvList(); paintUser();
     showPanel('personalize', true);
+    fitTabs();
+    requestAnimationFrame(fitTabs);
+    setTimeout(fitTabs, 400);              // après chargement des polices
+    addEventListener('resize', fitTabs);
+    if (window.ResizeObserver) new ResizeObserver(fitTabs).observe(document.getElementById('topbar'));
     if (!LS.get('choseMode', false)) askMode();
     pollApprovals();
   }
@@ -283,9 +321,10 @@
       top.insertBefore(box, document.getElementById('main-tabs'));
     }
     box.innerHTML = '';
-    [['chat', '💬 ' + t('mode.chat')], ['agent', '🤖 ' + t('mode.agent')]].forEach(([k, lab]) => {
-      const b = el('button', { class: 'tab' + (S.mode === k ? ' active' : ''), text: lab });
-      b.addEventListener('click', () => { S.mode = k; save('mode'); buildModeSwitch(); const chip = document.getElementById('mode-chip'); if (chip) chip.textContent = (k === 'agent' ? '🤖 ' : '💬 ') + t('mode.' + k); if (k === 'agent') toast(t('mode.agentl')); });
+    [['chat', '💬', 'mode.chat'], ['agent', '🤖', 'mode.agent']].forEach(([k, ico, key]) => {
+      const b = el('button', { class: 'tab' + (S.mode === k ? ' active' : '') });
+      b.append(el('span', { class: 'tab-ico', text: ico }), el('span', { class: 'tab-txt', text: t(key) }));
+      b.addEventListener('click', () => { S.mode = k; save('mode'); buildModeSwitch(); fitTabs(); if (k === 'agent') toast(t('mode.agentl')); });
       box.appendChild(b);
     });
   }
@@ -323,7 +362,7 @@
     if (!box) return;
     const q = (document.getElementById('conv-search')?.value || '').toLowerCase();
     box.innerHTML = '';
-    const list = S.conv.filter((c) => !q || (c.title || '').toLowerCase().includes(q));
+    const list = S.conv.filter((c) => (c.messages || []).length > 0 && (!q || (c.title || '').toLowerCase().includes(q)));
     if (!list.length) box.appendChild(el('div', { class: 'muted tiny', text: t('nav.none') }));
     list.forEach((c) => {
       const row = el('div', { class: 'conv' + (c.id === S.activeId ? ' active' : '') },
