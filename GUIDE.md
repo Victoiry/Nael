@@ -2,6 +2,11 @@
 
 Vous avez le lien de l'aperçu envoyé par Arena (il ressemble à `https://8787-xxxxxxxx.e2b.app`).
 
+## ⚠️ Important : après une mise à jour, votre navigateur garde l'ancienne page
+L'onglet de l'aperçu reste en mémoire : un simple F5 peut réafficher l'ancienne version (c'est ce qui a montré des textes comme `lp.cta`).
+La nouvelle version **se recharge toute seule** (`?v=…`) et affiche un bouton **⟳ Recharger** si besoin.
+Si jamais : **fermez l'onglet** puis rouvrez le lien, ou **Ctrl+Shift+R**. Le badge en bas doit indiquer **v1.3**.
+
 ## Étape 1 — Ouvrez le lien
 Vous devez voir** obligatoirement** en bas de la page le badge vert **v1.1**.
 
