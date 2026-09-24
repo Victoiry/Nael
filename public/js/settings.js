@@ -334,15 +334,41 @@
     dl.addEventListener('click', () => window.App.downloadBat('setup'));
     const dl2 = el('button', { class: 'btn sm' }, icon('terminal', 15), t('batch.access'));
     dl2.addEventListener('click', () => window.App.downloadBat('access'));
+    const codeBox = el('div', { class: 'row wrap', style: 'margin-top:.4rem' });
     const code = el('button', { class: 'btn sm' }, icon('refresh', 15), t('bridge.newcode'));
     code.addEventListener('click', async () => {
       const r = await API.call('/api/bridge/paircode', { method: 'POST' });
-      toast(t('bridge.paircode') + ' : ' + r.code, 'ok'); copyToClipboard(String(r.code));
+      copyToClipboard(String(r.code));
+      codeBox.innerHTML = '';
+      codeBox.append(
+        el('span', { class: 'tiny muted', text: t('bridge.codeLabel') + ' : ' }),
+        el('span', { class: 'code', text: String(r.code) }),
+        el('span', { class: 'tiny muted', text: ' ' + t('bridge.copied') }));
     });
+    const paste = el('input', { type: 'text', inputmode: 'numeric', placeholder: t('bridge.paste') });
+    const verify = el('button', { class: 'btn sm' }, icon('check', 15), t('bridge.verify'));
+    const paintVerify = (ok, msg) => {
+      verify.disabled = false;
+      verify.innerHTML = '';
+      verify.append(icon(ok ? 'check' : 'close', 15), document.createTextNode(' ' + msg));
+      setTimeout(() => { verify.disabled = false; verify.innerHTML = ''; verify.append(icon('check', 15), document.createTextNode(' ' + t('bridge.verify'))); }, 4000);
+    };
+    verify.addEventListener('click', async () => {
+      const v = paste.value.trim();
+      if (!v) return toast(t('bridge.paste'), 'err');
+      verify.disabled = true;
+      const r = await API.call('/api/bridge/verify', { method: 'POST', body: { code: v } }).catch(() => ({ ok: false, error: 'reseau' }));
+      if (r.ok) { paintVerify(true, t('bridge.verifyOk')); toast(t('bridge.verifyOk'), 'ok'); paste.value = ''; setTimeout(() => render('bridge'), 900); }
+      else paintVerify(false, t('bridge.err.' + (r.error || 'reseau')));
+    });
+    paste.addEventListener('keydown', (e) => { if (e.key === 'Enter') verify.click(); });
     box.appendChild(section('bridge.title',
       el('div', { class: 'kv' }, el('b', { text: t('bridge.title') }), el('span', { class: 'chip ' + (st.online ? 'free' : 'danger'), text: st.online ? t('bridge.online') : t('bridge.offline') })),
-      el('div', { class: 'kv' }, el('b', { text: t('bridge.paircode') }), el('span', { class: 'code', text: S.bridge.sessionId })),
-      el('div', { class: 'row wrap', style: 'margin-top:.5rem' }, dl, dl2, code)));
+      el('div', { class: 'kv' }, el('b', { text: t('bridge.session') }), el('span', { class: 'code', text: S.bridge.sessionId || '—' })),
+      el('div', { class: 'row wrap', style: 'margin-top:.5rem' }, dl, dl2, code),
+      codeBox,
+      el('div', { class: 'tiny muted', style: 'margin-top:.5rem', text: t('bridge.explain') }),
+      el('div', { class: 'row wrap', style: 'margin-top:.35rem' }, paste, verify)));
 
     const allow = await API.call('/api/bridge/allowlist').catch(() => ({ families: [] }));
     const al = el('div', {});
