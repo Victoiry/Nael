@@ -3,6 +3,8 @@
   if (!window.I18N) return;
   const EXTRA = {
     fr: {
+      "or.unreachable": "inaccessible depuis le serveur (cliquez sur Diagnostic)",
+      "or.threeWays": "Les trois canaux sont testés automatiquement : serveur JARVIS, navigateur, puis votre ordinateur (pont local).",
       "bridge.session": "Session locale",
       "bridge.codeLabel": "Numéro à recopier",
       "bridge.copied": "copié",
@@ -130,6 +132,8 @@
       'vid.unsupported': 'Ce navigateur ne permet pas l’enregistrement vidéo. L’aperçu animé reste disponible.',
     },
     en: {
+      "or.unreachable": "unreachable from the server (click Diagnostics)",
+      "or.threeWays": "All three channels are tried automatically: JARVIS server, browser, then your computer (local bridge).",
       "bridge.session": "Local session",
       "bridge.codeLabel": "Number to copy",
       "bridge.copied": "copied",
@@ -257,6 +261,8 @@
       'vid.unsupported': 'This browser cannot record video. The animated preview is still available.',
     },
     es: {
+      "or.unreachable": "inaccesible desde el servidor (pulsa Diagnóstico)",
+      "or.threeWays": "Los tres canales se prueban automáticamente: servidor JARVIS, navegador y tu ordenador (puente local).",
       "bridge.session": "Sesión local",
       "bridge.codeLabel": "Número a copiar",
       "bridge.copied": "copiado",
@@ -384,6 +390,8 @@
       'vid.unsupported': 'Este navegador no puede grabar vídeo. La vista previa animada sigue disponible.',
     },
     it: {
+      "or.unreachable": "irraggiungibile dal server (clicca Diagnostica)",
+      "or.threeWays": "I tre canali vengono provati automaticamente: server JARVIS, browser e il tuo computer (ponte locale).",
       "bridge.session": "Sessione locale",
       "bridge.codeLabel": "Numero da copiare",
       "bridge.copied": "copiato",

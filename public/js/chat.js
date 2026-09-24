@@ -168,19 +168,42 @@
     return MODELS.list;
   }
 
-  /** Bandeau d'erreur quand OpenRouter est injoignable + bouton Réessayer. */
+  /** Bandeau d'erreur quand OpenRouter est injoignable : les TROIS canaux sont expliqués,
+      avec un diagnostic en un clic (aucun bouton mort, aucune impasse). */
   function modelsBanner() {
     const retry = el('button', { class: 'btn sm primary' }, icon('refresh', 15), t('or.retry'));
     retry.addEventListener('click', async () => { await loadModels(true); renderMessages(); });
     const keysBtn = el('button', { class: 'btn sm' }, icon('link', 15), t('or.keys'));
     keysBtn.addEventListener('click', () => J.openLink('https://openrouter.ai/keys'));
+    const bridgeBtn = el('button', { class: 'btn sm' }, icon('plug', 15), t('nav.bridge'));
+    bridgeBtn.addEventListener('click', () => window.App.showPanel('bridge'));
+
+    const rows = el('div', { class: 'col', style: 'margin-top:.45rem;gap:.25rem' },
+      el('div', { class: 'kv' }, el('span', { class: 'chip danger', text: t('or.step.serveur') }), el('span', { class: 'tiny', style: 'text-align:right;flex:1', text: t('or.unreachable') })),
+      el('div', { class: 'kv' }, el('span', { class: 'chip danger', text: t('or.step.navigateur') }), el('span', { class: 'tiny', style: 'text-align:right;flex:1', text: t('or.cors') })),
+      el('div', { class: 'kv' }, el('span', { class: 'chip danger', text: t('or.step.pont') }), el('span', { class: 'tiny', style: 'text-align:right;flex:1', text: t('or.err.pont_hors_ligne') })));
+
     const diagBtn = el('button', { class: 'btn sm' }, icon('plug', 15), t('or.diag'));
-    diagBtn.addEventListener('click', () => window.App.showPanel('ai'));
+    diagBtn.addEventListener('click', async () => {
+      diagBtn.disabled = true;
+      diagBtn.innerHTML = '';
+      diagBtn.append(icon('refresh', 15), document.createTextNode(' ' + t('or.checking')));
+      const r = await J.ORapi.diagnose(S.key || '');
+      rows.innerHTML = '';
+      r.steps.forEach((st) => rows.appendChild(el('div', { class: 'kv' },
+        el('span', { class: st.ok ? 'chip free' : 'chip danger', text: t('or.step.' + st.step) }),
+        el('span', { class: 'tiny', style: 'text-align:right;flex:1', text: st.detail }))));
+      diagBtn.disabled = false;
+      diagBtn.innerHTML = '';
+      diagBtn.append(icon('plug', 15), document.createTextNode(' ' + t('or.diag')));
+      if (r.channel) paintModelButton();
+    });
+
     return el('div', { class: 'notice danger', style: 'max-width:680px;margin:2rem auto' },
       el('b', { text: t('or.offline.title') }),
-      el('div', { class: 'tiny', text: t('or.err.' + (MODELS.error || 'inconnu')) }),
-      el('div', { class: 'tiny muted', text: MODELS.detail || '' }),
-      el('div', { class: 'row wrap', style: 'margin-top:.5rem' }, retry, keysBtn, diagBtn));
+      el('div', { class: 'tiny muted', text: t('or.threeWays') }),
+      rows,
+      el('div', { class: 'row wrap', style: 'margin-top:.6rem' }, retry, diagBtn, bridgeBtn, keysBtn));
   }
   function paintModelButton() {
     const btn = document.getElementById('model-btn');
