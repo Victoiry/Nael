@@ -59,6 +59,7 @@
     mode: LS.get('mode', 'chat'),
     tab: LS.get('tab', 'classic'),
     activeId: null,
+    inApp: false,
     private: false,
     privateConv: null,
     user: null,

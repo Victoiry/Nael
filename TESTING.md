@@ -18,7 +18,14 @@ L'aperçu (panneau à droite) affiche déjà le site en direct. Vous pouvez vér
 
 > ⚠️ **Limite de l'aperçu** : le bac à sable n'a **pas d'accès réseau vers `openrouter.ai`**. JARVIS le dit clairement (bandeau + badge « inaccessible ») et propose **trois solutions** : le canal serveur, le canal navigateur direct, et le **relais par votre PC** (lancez `JARVIS-Setup.bat`, laissez la fenêtre ouverte : le badge passe à « via votre PC » et l'appel OpenRouter part de chez vous). Pour le test réel complet, faites l'option 2.
 
-### 🧷 Vérifier que TOUS les boutons fonctionnent (nouveau)
+### 🔑 Vérifier la connexion et l'absence de compte obligatoire (nouveau)
+```bash
+node tools/verify-auth.js       # connexion réelle (pas de faux « connecté »), session qui survit au rechargement,
+                                # pont local + .bat sans compte, un seul bouton « Tester » qui passe à « Test OK »
+```
+> La connexion n'est annoncée qu'après vérification par le serveur. Le compte reste **optionnel** : il ne sert qu'à synchroniser entre appareils.
+
+### 🧷 Vérifier que TOUS les boutons fonctionnent
 ```bash
 node tools/verify-buttons.js    # clique chaque bouton : aucun ne doit rester sans effet
 node tools/verify-surface.js    # audit statique : aucun appel mort, aucun élément manquant

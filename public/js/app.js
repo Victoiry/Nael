@@ -1,6 +1,6 @@
 /* JARVIS — coquille de l'application : accueil, barre latérale, en-tête, réglages, sécurité */
 (function () {
-  const { S, t, el, save, modal, toast, API, applyTheme, applyI18n, setLang, esc, countdownModal, LS, ico, icon } = window.J;
+  const { S, t, el, save, modal, toast, API, applyTheme, applyI18n, setLang, esc, countdownModal, LS, ico, icon, cloudPull, cloudPush, copy } = window.J;
   const A = { pendingPair: null, code: null };
   const linkBtn = (url, label, cls) => {
     const b = el('button', { class: 'btn sm ' + (cls || '') }, icon('link', 15), label);
@@ -81,15 +81,8 @@
     // glisser n'importe où : on ferme les menus
     window.addEventListener('resize', () => document.getElementById('main-grid').classList.remove('side-open'));
 
-    // session invitée silencieuse (nécessaire au pont local et aux .bat)
-    if (!S.auth) {
-      API.call('/api/auth/guest', { method: 'POST' }).then((r) => {
-        if (r.token) { S.auth = { token: r.token, name: r.user.name, email: r.user.email, guest: true }; save('auth'); paintUser(); }
-      }).catch(() => {});
-    } else {
-      paintUser();
-      API.call('/api/auth/me').then((r) => { S.user = r.user; paintUser(); }).catch(() => {});
-    }
+    // session : on vérifie TOUJOURS le jeton auprès du serveur avant d'afficher « connecté »
+    AUTH.restore();
 
     // modèles : en arrière-plan, jamais bloquant pour l'interface
     window.Chat.loadModels().catch(() => {});
@@ -115,22 +108,24 @@
       el('div', { class: 'tiny muted', text: t('onb.step1.a') }),
       el('div', { class: 'tiny muted', text: t('onb.step1.b') }),
       el('div', { class: 'tiny muted', text: t('onb.step1.c') }),
-      (() => { const b = el('button', { class: 'btn sm', style: 'margin-top:.4rem' }, icon('link', 15), t('onb.step1.link')); b.addEventListener('click', () => J.openLink('https://openrouter.ai/keys')); return b; })());
+      (() => { const b = el('button', { class: 'link-muted', style: 'margin-top:.35rem' }, t('onb.step1.link')); b.addEventListener('click', () => J.openLink('https://openrouter.ai/keys')); return b; })());
 
     const keyInput = el('input', { type: 'password', placeholder: t('onb.step2.p'), value: S.key || '' });
     mk(2, 'onb.step2.t', keyInput, el('div', { class: 'tiny muted', text: t('onb.free') }));
     mk(3, 'onb.step3.t', el('div', { class: 'tiny muted', text: t('onb.step3.d') }));
     body.appendChild(steps);
 
-    const testBtn = el('button', { class: 'btn primary' }, icon('check', 16), t('onb.test'));
-    const skip = el('button', { class: 'btn', id: 'onb-skip', text: t('auth.guest'), onclick: () => { m.close(); enterApp(); } });
+    const testBtn = el('button', { class: 'btn primary', id: 'onb-test' }, icon('check', 16), el('span', { text: t('onb.test') }));
+    // aucun compte n'est demandé : un simple lien discret pour continuer plus tard
+    const skip = el('button', { class: 'link-muted', id: 'onb-skip', text: t('onb.later'), onclick: () => { m.close(); enterApp(); } });
     keyInput.addEventListener('input', () => { keyInput.style.borderColor = ''; });
     testBtn.addEventListener('click', () => {
       const k = keyInput.value.trim();
       if (!/^sk-or-v1-/.test(k)) { keyInput.style.borderColor = 'var(--danger)'; return toast(t('auth.err.invalid'), 'err'); }
       openModelTest(k, m);
     });
-    const m = modal({ title: t('onb.title'), sub: t('auth.subtitle'), body, foot: [skip, testBtn], vert: true, closeable: !force });
+    const foot = el('div', { class: 'col', style: 'align-items:stretch;gap:.4rem' }, testBtn, el('div', { class: 'center' }, skip));
+    const m = modal({ title: t('onb.title'), sub: t('auth.subtitle'), body, foot: [foot], vert: true, closeable: !force });
     if (A.pendingPair) { m.close(); openBatchStep(A.pendingPair); }
   }
 
@@ -147,8 +142,8 @@
     const search = el('input', { type: 'text', placeholder: t('model.search') });
     const listBox = el('div', { class: 'model-list', style: 'max-height:270px' });
     const footMsg = el('div', { class: 'tiny muted' });
-    const btnTest = el('button', { class: 'btn primary' }, icon('check', 16), t('model.test'));
-    const btnSave = el('button', { class: 'btn primary hidden' }, icon('download', 16), t('model.save'));
+    const btnTest = el('button', { class: 'btn primary', id: 'model-test-btn' }, icon('check', 16), el('span', { text: t('model.test') }));
+    const btnLater = el('button', { class: 'link-muted' }, el('span', { text: t('model.optional') }));
     const btnReload = el('button', { class: 'btn sm' }, icon('refresh', 15), t('or.retry'));
     const btnMore = el('button', { class: 'btn sm ghost' }, icon('book', 15), t('model.more'));
 
@@ -245,15 +240,24 @@
       if (r.via) paintChannel(r.via);
       btnTest.disabled = false; btnTest.textContent = t('model.test');
       if (r.ok) {
-        btnTest.classList.add('hidden'); btnSave.classList.remove('hidden');
+        // clé testée AVANT d'être enregistrée, puis un seul bouton qui passe à « Test OK »
         S.key = key; S.model = selected; S.settings.ai.model = selected;
         save('settings'); save('model'); LS.setRaw('key', key);
         if (S.auth && !S.auth.guest) API.call('/api/auth/provision', { method: 'POST', body: { key, model: selected } });
-        footMsg.textContent = t('onb.step3.d');
+        footMsg.textContent = t('model.savedLocal');
         window.Chat.loadModels(true).catch(() => {});
+        btnTest.disabled = true;
+        btnTest.classList.remove('primary');
+        btnTest.classList.add('ok'); btnTest.id = 'model-test-ok';
+        btnTest.innerHTML = '';
+        btnTest.append(icon('check', 16), el('span', { text: t('model.testOk') }));
+        toast(t('model.testOk') + ' — ' + ((models.find((x) => x.id === selected) || {}).name || selected), 'ok');
+        setTimeout(() => { prevModal?.close(); m.close(); if (!window.J.S.inApp) enterApp(); else window.Chat.buildComposer(); }, 900);
+      } else {
+        btnTest.disabled = false;
       }
     });
-    btnSave.addEventListener('click', () => { prevModal?.close(); m.close(); openBatchStep(); });
+    btnLater.addEventListener('click', () => { prevModal?.close(); m.close(); openBatchStep(); });   // pont local : optionnel
     search.addEventListener('input', draw);
 
     const keyIn = el('input', { type: 'password', placeholder: t('onb.step2.p'), value: key });
@@ -264,7 +268,8 @@
     body.append(
       el('div', { class: 'row', style: 'margin:.6rem 0 .3rem' }, el('b', { text: t('model.list') }), el('span', { class: 'spacer' }), chanChip, btnReload, btnMore),
       search, listBox, status, keyField, footMsg);
-    const m = modal({ title: t('model.title'), sub: t('model.warn'), body, foot: [btnTest, btnSave], vert: true });
+    const footRow = el('div', { class: 'col', style: 'align-items:stretch;gap:.35rem' }, btnTest, el('div', { class: 'center' }, btnLater));
+    const m = modal({ title: t('model.title'), sub: t('model.warn'), body, foot: [footRow], vert: true });
     await loadModels(true);
   }
 
@@ -358,6 +363,7 @@
   }
 
   function enterAppInner() {
+    S.inApp = true;
     document.getElementById('landing').classList.add('hidden');
     document.getElementById('workspace').classList.remove('hidden');
     document.body.classList.add('app-mode');
@@ -490,44 +496,128 @@
   }
 
   // ---------- compte
+  /* ---------------- session : une seule source de vérité ----------------
+     - l'invité silencieux sert au pont local (aucun compte requis) ;
+     - une réponse d'invité arrivée APRÈS une connexion est ignorée (fin du « connecté mais pas connecté ») ;
+     - on ne dit « connecté » qu'après vérification du jeton par /api/auth/me. */
+  const AUTH = {
+    seq: 0,
+    paint() { paintUser(); },
+    async restore() {
+      const cur = S.auth;
+      if (cur && cur.token) {
+        // jeton stocké : on demande au serveur qui il est vraiment
+        let me = null, transport = false;
+        try {
+          const r = await API.call('/api/auth/me', { headers: { Authorization: 'Bearer ' + cur.token } });
+          if (r && r.user) me = r.user;
+          else if (r && r.error) transport = true;   // réseau/serveur en panne : on garde la session locale
+        } catch { transport = true; }
+        if (me) {
+          S.auth = Object.assign({}, cur, { name: me.name, email: me.email, guest: !!cur.guest });
+          save('auth'); paintUser();
+          if (!S.auth.guest) { try { await window.J.cloudPull(); } catch {} }   // jamais bloquant
+          return S.auth;
+        }
+        if (!transport) { S.auth = null; LS.del('auth'); }   // le serveur a dit « personne » : jeton réellement invalide
+        else { paintUser(); return S.auth; }
+      }
+      paintUser();
+      return AUTH.guest();
+    },
+    async guest() {
+      const mine = ++AUTH.seq;
+      try {
+        const r = await API.call('/api/auth/guest', { method: 'POST' });
+        // JAMAIS d'écrasement d'une session connectée : ni en mémoire, ni dans le stockage
+        const stored = LS.get('auth', null);
+        const real = (S.auth && !S.auth.guest) || (stored && !stored.guest);
+        if (!r.token || AUTH.seq !== mine || real) return S.auth;
+        S.auth = { token: r.token, name: r.user.name, email: r.user.email, guest: true };
+        save('auth'); paintUser();
+        return S.auth;
+      } catch { return S.auth; }
+    },
+    async login(mode, { email, password, name }) {
+      const mine = ++AUTH.seq;
+      const r = await API.call('/api/auth/' + mode, { method: 'POST', body: { email, password, name } });
+      if (!r || !r.token) return { ok: false, error: (r && r.error) || 'reseau' };
+      // vérification réelle avant d'annoncer quoi que ce soit
+      const me = await API.call('/api/auth/me', { headers: { Authorization: 'Bearer ' + r.token } });
+      if (AUTH.seq !== mine) return { ok: false, error: 'annule' };
+      if (!me.user) return { ok: false, error: 'session' };
+      S.auth = { token: r.token, name: me.user.name, email: me.user.email, guest: false };
+      save('auth'); paintUser();
+      try { await window.J.cloudPull(); } catch {}
+      return { ok: true, user: S.auth };
+    },
+    async logout() {
+      AUTH.seq++;
+      S.auth = null; LS.del('auth'); paintUser();
+      await AUTH.guest();
+    },
+  };
+
   function paintUser() {
-    const name = S.auth ? (S.auth.name || t('auth.guestName')) : t('auth.guest');
+    const logged = !!(S.auth && !S.auth.guest);
+    const name = logged ? (S.auth.name || S.auth.email) : t('auth.guestName');
     document.getElementById('me-name').textContent = name;
-    document.getElementById('me-mail').textContent = S.auth ? (S.auth.guest ? t('auth.guestnote') : S.auth.email || '') : '';
+    document.getElementById('me-mail').textContent = logged ? (S.auth.email || '') : t('auth.guestnote');
+    const chip = document.getElementById('me-state');
+    if (chip) {
+      chip.className = 'chip ' + (logged ? 'free' : '');
+      chip.textContent = logged ? t('auth.synced') : t('auth.local');
+    }
     document.getElementById('me-avatar').textContent = (name || 'U').trim().charAt(0).toUpperCase();
     const btn = document.getElementById('btn-auth-top');
     if (btn) { btn.innerHTML = ''; btn.appendChild(icon(S.auth && !S.auth.guest ? 'logout' : 'user', 16)); btn.title = S.auth && !S.auth.guest ? t('auth.logout') : t('auth.login'); }
   }
-  function openAuth() {
-    const email = el('input', { type: 'email', placeholder: t('auth.email') });
-    const pass = el('input', { type: 'password', placeholder: t('auth.password') });
+  function openAuth(startMode) {
+    const email = el('input', { type: 'email', placeholder: t('auth.email'), autocomplete: 'email' });
+    const pass = el('input', { type: 'password', placeholder: t('auth.password'), autocomplete: 'current-password' });
     const name = el('input', { type: 'text', placeholder: t('auth.name'), class: 'hidden' });
     const err = el('div', { class: 'notice danger tiny hidden' });
-    let mode = 'login';
-    const tLogin = el('button', { class: 'btn sm primary', text: t('auth.login') });
-    const tReg = el('button', { class: 'btn sm', text: t('auth.register') });
+    const busy = el('div', { class: 'tiny muted hidden dots', text: t('auth.working') });
+    let mode = startMode === 'register' ? 'register' : 'login';
+    const tLogin = el('button', { class: 'btn sm' + (mode === 'login' ? ' primary' : ''), text: t('auth.login') });
+    const tReg = el('button', { class: 'btn sm' + (mode === 'register' ? ' primary' : ''), text: t('auth.register') });
     const tabs = el('div', { class: 'row', style: 'margin-bottom:.8rem' }, tLogin, tReg);
-    tLogin.addEventListener('click', () => { mode = 'login'; tLogin.classList.add('primary'); tReg.classList.remove('primary'); name.classList.add('hidden'); });
-    tReg.addEventListener('click', () => { mode = 'register'; tReg.classList.add('primary'); tLogin.classList.remove('primary'); name.classList.remove('hidden'); });
-    const go = el('button', { class: 'btn primary', text: t('auth.login') });
-    go.addEventListener('click', async () => {
-      const r = await API.call('/api/auth/' + mode, { method: 'POST', body: { email: email.value, password: pass.value, name: name.value } });
-      if (r.error) { err.classList.remove('hidden'); err.textContent = t('auth.err.' + r.error); return; }
-      S.auth = { token: r.token, name: r.user.name, email: r.user.email };
-      save('auth'); paintUser(); m.close();
-      await window.J.cloudPull();
-      toast(t('toast.saved'), 'ok'); applyTheme(); window.Chat.buildComposer(); renderConvList();
-    });
-    const guest = el('button', { class: 'btn', text: t('auth.guest') });
-    guest.addEventListener('click', async () => {
-      const r = await API.call('/api/auth/guest', { method: 'POST' });
-      S.auth = { token: r.token, name: r.user.name, email: r.user.email, guest: true };
-      save('auth'); paintUser(); m.close(); toast(t('auth.guestnote'));
-    });
-    const body = el('div', {}, tabs, el('div', { class: 'field' }, email), el('div', { class: 'field' }, pass), el('div', { class: 'field' }, name), err);
+    const sync = (m) => {
+      mode = m;
+      tLogin.classList.toggle('primary', m === 'login');
+      tReg.classList.toggle('primary', m === 'register');
+      name.classList.toggle('hidden', m !== 'register');
+      tabIntro.textContent = m === 'register' ? t('auth.optional') : t('auth.why');
+      go.textContent = m === 'register' ? t('auth.register') : t('auth.login');
+    };
+    tLogin.addEventListener('click', () => sync('login'));
+    tReg.addEventListener('click', () => sync('register'));
+    const tabIntro = el('div', { class: 'tiny muted', style: 'margin-bottom:.6rem', text: mode === 'register' ? t('auth.optional') : t('auth.why') });
+    const go = el('button', { class: 'btn primary', text: mode === 'register' ? t('auth.register') : t('auth.login') });
+    const submit = async () => {
+      err.classList.add('hidden'); busy.classList.remove('hidden');
+      const res = await AUTH.login(mode, { email: email.value.trim(), password: pass.value, name: name.value.trim() });
+      busy.classList.add('hidden');
+      if (!res.ok) {
+        err.classList.remove('hidden');
+        err.textContent = t('auth.err.' + (res.error || 'reseau'));
+        return;
+      }
+      m.close();
+      toast(t('auth.welcome', { email: res.user.email }), 'ok');
+      if (!S.inApp) { if (S.key) enterApp(); else startOnboarding(false); }
+      else { renderConvList(); applyTheme(); window.Chat.buildComposer(); applyI18n(document); }
+    };
+    go.addEventListener('click', submit);
+    [email, pass, name].forEach((i) => i.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); }));
+    const guest = el('button', { class: 'btn sm ghost', text: t('auth.guestShort') });
+    guest.addEventListener('click', async () => { await AUTH.guest(); m.close(); toast(t('auth.guestnote')); if (!S.inApp) { if (S.key) enterApp(); else startOnboarding(false); } });
+    const body = el('div', {}, tabIntro, tabs,
+      el('div', { class: 'field' }, email), el('div', { class: 'field' }, pass), el('div', { class: 'field' }, name), err, busy);
     const m = modal({ title: t('auth.title'), sub: t('auth.subtitle'), body, foot: [guest, go], vert: true });
+    setTimeout(() => email.focus(), 100);
   }
-  function logout() { S.auth = null; save('auth'); paintUser(); toast(t('auth.logout')); }
+  function logout() { AUTH.logout(); toast(t('auth.logout')); }
 
   // ---------- pont local
   async function pollBridge() {

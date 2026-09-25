@@ -347,6 +347,7 @@ async function api(req, res, url) {
 
   // ---- local bridge
   if (p === '/bridge/paircode' && req.method === 'POST') {
+    // aucune inscription requise : une session invitée suffit
     if (!user) return json(res, 401, { error: 'auth' });
     const code = bridge.newPairCode();
     bridge.log('pair', 'Code de vérification généré');
@@ -417,6 +418,7 @@ async function api(req, res, url) {
   }
   if (p === '/bridge/allowlist/remove' && req.method === 'POST') {
     const b = await readBody(req);
+    if (!user) return json(res, 401, { error: 'auth' });
     tasks.removeAlwaysAllowed(user.sub, b.family);
     return json(res, 200, { ok: true });
   }
@@ -430,6 +432,7 @@ async function api(req, res, url) {
     return json(res, 200, { image: bridge.state.lastScreenshot });
   }
   if (p === '/bridge/download/setup' ) {
+    // le .bat est disponible sans compte (la clé reste optionnelle dans le fichier)
     if (!user) return json(res, 401, { error: 'auth' });
     const fresh = bridge.state.pairCode && Date.now() - bridge.state.pairCodeAt < 1000 * 60 * 30;
     const code = fresh ? bridge.state.pairCode : bridge.newPairCode();

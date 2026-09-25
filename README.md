@@ -106,6 +106,13 @@ legacy/                 ancien projet « garcon runner »
 Mode privé : aucune trace (ni historique, ni mémoire, ni logs, contexte oublié à la fermeture).
 Les clés API restent dans votre navigateur (ou dans votre compte si vous vous connectez) — jamais affichées à un tiers.
 
+## 🔑 Compte : optionnel (jamais imposé)
+
+- **Aucun compte n'est nécessaire** : au lancement, une session invitée silencieuse sert au pont local et aux `.bat` (le code de vérification et le téléchargement du `.bat` fonctionnent sans compte).
+- Le compte sert uniquement à **synchroniser** mémoire / historique / réglages entre appareils. La fenêtre de connexion s'ouvre par défaut sur « Se connecter » ; « Créer le compte » est un onglet, pas une obligation.
+- La connexion n'est annoncée **qu'après vérification du jeton par le serveur** (`/api/auth/me`) : plus de « connecté » sans l'être. La pastille du profil indique `Synchronisé` ou `Local`.
+- Fenêtre de clé OpenRouter : **un seul bouton** — « Tester » — qui devient **« Test OK »** après un test réussi ; la clé n'est enregistrée qu'à ce moment-là.
+
 ## 🧪 Tests
 
 Guide complet : **[TESTING.md](TESTING.md)**
@@ -118,6 +125,8 @@ node tools/verify-clicks.js                                     # clique toute l
 node tools/verify-buttons.js                                    # CHAQUE bouton doit produire un effet (aucun bouton mort, aucune invite native)
 node tools/verify-relay.js                                      # canal « pont local » : protocole + bascule automatique du navigateur
 node tools/verify-flow.js                                       # parcours réel : accueil → sans compte → envoi → réponse → panneau → 4 langues
+node tools/verify-auth.js                                       # connexion réelle, session persistante, aucun compte obligatoire, un seul bouton « Tester » → « Test OK »
+node tools/verify-surface.js                                    # audit statique : aucun appel mort, aucun élément manquant, aucun helper non importé
 node --check server/index.js && node --check bridge/runner.js   # syntaxe
 npm i --no-save jsdom && node tools/smoke.js                    # parcours front complet (jsdom)
 ```

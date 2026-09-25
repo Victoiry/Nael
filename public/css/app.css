@@ -382,3 +382,8 @@ body.resizing { cursor: col-resize; user-select: none; }
   #chat-scroll.grid-mode, .grid2.mt { grid-template-columns: 1fr; grid-template-rows: auto; }
   .model-btn .nm { max-width: 110px; }
 }
+
+/* lien texte discret (plus léger qu'un bouton : une seule action par écran) */
+.link-muted { background: none; border: 0; padding: .1rem .2rem; color: var(--muted); font: inherit; font-size: .78em;
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.link-muted:hover { color: var(--text); }

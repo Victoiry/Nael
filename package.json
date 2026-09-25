@@ -10,7 +10,7 @@
     "check": "node --check server/index.js && node --check bridge/runner.js",
     "doctor": "node tools/doctor.js",
     "smoke": "node tools/smoke.js",
-    "verify": "node tools/i18n-check.js && node tools/verify-surface.js && node tools/verify-server-or.js && node tools/verify-openrouter.js && node tools/verify-relay.js && node tools/verify-clicks.js && node tools/verify-buttons.js && node tools/verify-flow.js && node tools/doctor.js",
+    "verify": "node tools/i18n-check.js && node tools/verify-surface.js && node tools/verify-server-or.js && node tools/verify-openrouter.js && node tools/verify-relay.js && node tools/verify-auth.js && node tools/verify-clicks.js && node tools/verify-buttons.js && node tools/verify-flow.js && node tools/doctor.js",
     "verify:ui": "node tools/verify-i18n-ui.js",
     "i18n-check": "node tools/i18n-check.js",
     "verify:layout": "node tools/verify-layout.js",
@@ -24,7 +24,8 @@
     "verify:relay": "node tools/verify-relay.js",
     "verify:buttons": "node tools/verify-buttons.js",
     "verify:flow": "node tools/verify-flow.js",
-    "verify:surface": "node tools/verify-surface.js"
+    "verify:surface": "node tools/verify-surface.js",
+    "verify:auth": "node tools/verify-auth.js"
   },
   "engines": {
     "node": ">=18"

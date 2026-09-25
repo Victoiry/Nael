@@ -53,6 +53,29 @@ referenced.forEach((id) => {
   if (!htmlIds.has(id) && !dyn) problems.push('#' + id + ' est utilisé dans le JS mais n’existe pas dans index.html');
 });
 
+// ---------- 3bis) helpers J.* appelés en clair mais jamais importés dans le fichier
+// (cause d'un « connecté mais pas connecté » : un ReferenceError avalé par un catch)
+const CORE_EXPORTS = new Set([...expDef]);
+app.forEach(({ f, src }) => {
+  const consumersOnly = ['core.js', 'i18n.js', 'i18n.extra.js', 'icons.js'];
+  if (consumersOnly.includes(f)) return;                 // core.js définit les exports, i18n/icons sont des données
+  const destructured = new Set();
+  [...src.matchAll(/const\s*\{([^}]*)\}\s*=\s*(?:window\.)?J\b/g)].forEach((m) => {
+    m[1].split(',').forEach((x) => { const n = x.split(':').pop().trim(); if (n) destructured.add(n); });
+  });
+  [...src.matchAll(/const\s+(\w+)\s*=\s*(?:window\.)?J\.\w+/g)].forEach((m) => destructured.add(m[1]));
+  const imported = new Set([...destructured]);
+  CORE_EXPORTS.forEach((name) => {
+    if (name.length < 3 || imported.has(name)) return;
+    // appel direct « name( » ou « name. » sans window.J / J. devant
+    const bare = new RegExp('(?<![\\w.$\'"`])' + name + '\\s*[(.]', 'g');
+    // la recherche exclut déjà les usages qualifiés (« J.toast », « window.J.toast »)
+    if (bare.test(src)) {
+      problems.push('public/js/' + f + ' : « ' + name + ' » est appelé sans être importé depuis window.J (ReferenceError silencieux)');
+    }
+  });
+});
+
 // ---------- 4) data-action de l'accueil -> un gestionnaire doit être branché
 const actions = [...html.matchAll(/data-action="([^"]+)"/g)].map((m) => m[1]);
 [...new Set(actions)].forEach((a) => {
