@@ -57,7 +57,7 @@
     const liveBtn = el('button', { class: 'ibtn tip', id: 'live-btn', 'data-tip': t('msg.live') }, icon('camera', 19));
     liveBtn.addEventListener('click', () => toggleLive());
 
-    const sendBtn = el('button', { class: 'ibtn tip', id: 'send-btn', 'data-tip': t('msg.send'), style: 'color:var(--accent)' }, icon('send', 19));
+    const sendBtn = el('button', { class: 'ibtn tip', id: 'send-btn', 'data-tip': t('msg.send'), style: 'color:var(--text);background:var(--surface-2)' }, icon('send', 19));
     sendBtn.addEventListener('click', () => { if (S.abort || (window.OR && window.OR.state.abort)) J.ORapi.stop(); else send(); });
 
     box.append(el('div', { class: 'tools' }, plus), ta, el('div', { class: 'right' }, effortBtn, voiceBtn, liveBtn, sendBtn));
@@ -664,7 +664,7 @@
 
     const body = el('div', { class: 'body' });
     const input = el('input', { type: 'text', placeholder: t('msg.placeholder') });
-    const go = el('button', { class: 'ibtn', style: 'color:var(--accent)' }, icon('send', 17));
+    const go = el('button', { class: 'ibtn', style: 'color:var(--text);background:var(--surface-2)' }, icon('send', 17));
     const run = async () => {
       const q = input.value.trim();
       if (!q) { toast(t('msg.empty'), 'err'); input.focus(); return; }

@@ -39,7 +39,7 @@
     lang: (navigator.language || 'fr').slice(0, 2) in { fr: 1, en: 1, es: 1, it: 1 } ? (navigator.language || 'fr').slice(0, 2) : 'fr',
     activeProfile: 0,
     profiles: [DEFAULT_PROFILE()],
-    global: { theme: 'dark', accent: '#22d3ee', accent2: '#7c6cff', bgType: 'gradient', bgUrl: '', particles: true, glass: 14, density: 1, radius: 14, fontSize: 15, font: "'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif", anim: true, compact: false },
+    global: { theme: 'dark', accent: 'auto', accent2: 'auto', bgType: 'solid', bgUrl: '', particles: false, glass: 16, density: 1, radius: 12, fontSize: 15, font: "ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", anim: true, compact: false },
     ai: {
       model: '', effort: 'normal', temperature: 0.7, maxTokens: 4000, stream: true, autoScroll: true,
       enterSend: true, compact: false, ttsAuto: false, sttLang: '', wake: false, useMemory: true, useHistory: true,
@@ -123,16 +123,20 @@
   function applyTheme() {
     const g = S.settings.global;
     const r = document.documentElement;
-    r.dataset.theme = g.theme;
+    // deux thèmes seulement : noir uni ou blanc uni (les anciens réglages « neon »/« gradient » sont migrés)
+    const theme = g.theme === 'light' ? 'light' : 'dark';
+    g.theme = theme; g.bgType = ['image', 'video'].includes(g.bgType) ? g.bgType : 'solid'; g.particles = false;
+    r.dataset.theme = theme;
     const st = r.style;
-    st.setProperty('--accent', g.accent);
-    st.setProperty('--accent2', g.accent2);
+    // accent « auto » = couleur du texte (noir sur blanc, blanc sur noir) : aucun néon
+    if (!g.accent || g.accent === 'auto') st.removeProperty('--accent'); else st.setProperty('--accent', g.accent);
     st.setProperty('--density', String(g.density));
     st.setProperty('--glass', g.glass + 'px');
     st.setProperty('--radius', g.radius + 'px');
     st.setProperty('--fs', g.fontSize + 'px');
     st.setProperty('--font', g.font);
-    st.setProperty('--anim-speed', g.anim ? '.16s' : '0s');
+    st.setProperty('--anim', g.anim ? '.2s' : '0s');
+    r.dataset.anim = g.anim ? '1' : '0';
     const bg = document.getElementById('bg');
     if (bg) {
       if (g.bgType === 'image' && g.bgUrl) { bg.style.backgroundImage = `url(${JSON.stringify(g.bgUrl)})`; bg.style.backgroundSize = 'cover'; bg.style.backgroundPosition = 'center'; }
@@ -759,35 +763,15 @@
   };
 
   // ---------------------------------------------------------------- fond
+  /** Fond : uni (aucune particule, aucun dégradé animé). Conservé pour compatibilité. */
   function startBg() {
-    const cv = document.querySelector('#bg canvas');
-    if (!cv || !S.settings.global.particles) return;
-    let ctx = null;
-    try { ctx = cv.getContext('2d'); } catch {}
-    if (!ctx) return;
-    let w, h, pts;
-    const size = () => {
-      w = cv.width = innerWidth; h = cv.height = innerHeight;
-      pts = Array.from({ length: Math.min(70, Math.round(w / 22)) }, () => ({ x: Math.random() * w, y: Math.random() * h, r: Math.random() * 1.6 + 0.4, vy: Math.random() * 0.22 + 0.05, vx: (Math.random() - 0.5) * 0.12 }));
-    };
-    size();
-    addEventListener('resize', size);
-    const loop = () => {
-      ctx.clearRect(0, 0, w, h);
-      const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#22d3ee';
-      ctx.fillStyle = accent;
-      pts.forEach((p) => {
-        p.x += p.vx; p.y -= p.vy;
-        if (p.y < -6) { p.y = h + 6; p.x = Math.random() * w; }
-        ctx.globalAlpha = 0.35;
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
-      });
-      requestAnimationFrame(loop);
-    };
-    loop();
+    const bg = document.getElementById('bg');
+    if (!bg) return;
+    bg.querySelector('canvas')?.remove();
+    bg.style.backgroundImage = '';
   }
 
-  /** Copie robuste : presse-papiers moderne, sinon repli (et jamais d'erreur visible). */
+/** Copie robuste : presse-papiers moderne, sinon repli (et jamais d'erreur visible). */
   function fallbackCopy(str) {
     try {
       const ta = document.createElement('textarea');

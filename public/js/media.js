@@ -12,7 +12,7 @@
     adj: { brightness: 100, contrast: 100, saturate: 100, hue: 0, blur: 0, sepia: 0, gray: 0, invert: 0, vignette: 0, grain: 0, sharpen: 0 },
     tf: { rotate: 0, flipH: false, flipV: false },
     size: { w: 1024, h: 1024 },
-    brush: { on: false, color: '#22d3ee', size: 18 },
+    brush: { on: false, color: '#8a8a8a', size: 18 },
     texts: [],
     mark: { on: false, text: 'JARVIS', pos: 'br', opacity: 0.55, size: 34, color: '#ffffff' },
     quality: 'normal',
@@ -81,7 +81,7 @@
       el('div', { class: 'tiny muted', text: QUAL[ST.quality][0] + ' · bitrate ' + QUAL[ST.quality][2] + ' Mb/s' })));
 
     // --- couleurs
-    const colors = ['#22d3ee', '#7c6cff', '#3ecf8e', '#e3b341', '#f2555a', '#ffffff', '#111827', '#ff4ecd'];
+    const colors = ['#ffffff', '#d4d4d4', '#8a8a8a', '#404040', '#000000', '#b4713f', '#4f7a52', '#3f5d8a'];
     const palette = el('div', { class: 'row wrap' });
     colors.forEach((c) => {
       const b = el('button', { class: 'chip', style: `background:${c};width:26px;height:26px;border-radius:8px`, title: c });
@@ -284,7 +284,14 @@
   }
   function ensure() { if (!ST.src) fillProcedural(ST.prompt || 'jarvis'); }
 
-  async function redraw(resize) {
+  /* Un seul rendu à la fois : les appels rapprochés (pinceau, curseurs) ne se
+     marchent plus dessus, et aucune erreur de rendu ne peut remonter à l'écran. */
+  let REDRAW_SEQ = 0;
+  function redraw(resize) {
+    const seq = ++REDRAW_SEQ;
+    paint(resize, seq).catch(() => {});
+  }
+  async function paint(resize, seq) {
     ensure();
     if (ST.noCanvas || !ok2d(ST.out)) return;
     if (resize) {
@@ -318,6 +325,7 @@
     c.drawImage(ST.paint, -w / 2, -h / 2, w, h);
     c.restore();
     applyTexts(c, sw, sh);
+    if (seq !== REDRAW_SEQ) return;                       // un rendu plus récent a pris la main
     applyVignette(c, sw, sh);
     applyGrain(c, sw, sh);
     if (ST.mark.on) drawWatermark(c, sw, sh);

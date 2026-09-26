@@ -124,23 +124,26 @@
 
     box.appendChild(section('set.language.site',
       selectInput(window.LANGS.map((l) => ({ v: l.code, l: l.label })), S.settings.lang, (v) => { window.J.setLang(v); render('global'); })));
+    const accentReset = el('button', { class: 'btn sm' }, icon('refresh', 15), t('set.accentAuto'));
+    accentReset.addEventListener('click', () => { set({ accent: 'auto' }, true); render('global'); });
     box.appendChild(section('set.theme',
       el('div', { class: 'col' },
-        selectInput([{ v: 'dark', l: t('set.themeDark') }, { v: 'light', l: t('set.themeLight') }, { v: 'neon', l: t('set.themeNeon') }], g.theme, (v) => set({ theme: v }, true)),
-        field('set.accent', colorInput(g.accent, (v) => set({ accent: v }))),
-        field('set.accent', colorInput(g.accent2, (v) => set({ accent2: v }))),
-        field('set.bg', selectInput([{ v: 'gradient', l: 'Dégradé' }, { v: 'image', l: 'Image (URL)' }, { v: 'video', l: 'Vidéo (URL)' }], g.bgType, (v) => set({ bgType: v }, true))),
-        field('set.bg', textInput(g.bgUrl, (v) => set({ bgUrl: v }), 'url', 'https://…')),
-        el('small', { class: 'muted tiny', text: t('set.bgHint') }),
-        switchRow('set.bgParticles', g.particles, (v) => set({ particles: v })),
+        selectInput([{ v: 'dark', l: t('set.themeDark') }, { v: 'light', l: t('set.themeLight') }], g.theme, (v) => set({ theme: v }, true)),
+        el('small', { class: 'muted tiny', text: t('set.themeHint') }),
+        el('div', { class: 'row wrap' },
+          field('set.accent', colorInput(!g.accent || g.accent === 'auto' ? (g.theme === 'light' ? '#0d0d0d' : '#ececec') : g.accent, (v) => set({ accent: v }))),
+          accentReset),
+        field('set.bg', selectInput([{ v: 'solid', l: t('set.bgSolid') }, { v: 'image', l: t('set.bgImage') }, { v: 'video', l: t('set.bgVideo') }], g.bgType, (v) => set({ bgType: v }, true))),
+        g.bgType === 'solid' ? el('span') : field('set.bg', textInput(g.bgUrl, (v) => set({ bgUrl: v }), 'url', 'https://…')),
+        el('small', { class: 'muted tiny', text: t('set.bgHint2') }),
         slider('set.glass', 0, 30, 1, g.glass, (v) => set({ glass: v })),
         slider('set.density', 0.7, 1.5, 0.05, g.density, (v) => set({ density: v })),
         slider('set.radius', 0, 26, 1, g.radius, (v) => set({ radius: v })),
         slider('set.fontSize', 12, 20, 1, g.fontSize, (v) => set({ fontSize: v })),
         field('set.font', selectInput([
-          { v: "'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif", l: 'Inter' },
-          { v: "Georgia, 'Times New Roman', serif", l: 'Serif' },
-          { v: "'JetBrains Mono', Consolas, monospace", l: 'Monospace' },
+          { v: "ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", l: t('set.fontSystem') },
+          { v: "Georgia, 'Times New Roman', serif", l: t('set.fontSerif') },
+          { v: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", l: t('set.fontMono') },
         ], g.font, (v) => set({ font: v }))),
         switchRow('set.animations', g.anim, (v) => set({ anim: v })))));
 
